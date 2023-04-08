@@ -5,7 +5,11 @@ from PyQt5.QtGui import QColor, QPalette
 import requests
 import socketio
 
-name = "main"
+#
+# THIS IS JUST A COPY OF alert_gui.py SETUP WITH A NON-ADMIN USER
+# IN DEMO - RUN THIS ONE BEFORE alert_gui
+#
+
 SERVER_URL = "http://localhost:5000/"
 
 class AlertDisplay(QWidget):
@@ -106,5 +110,5 @@ def main():
     else:
         print("Invalid user credentials")
 
-if name == 'main':
+if __name__ == '__main__':
     main()
