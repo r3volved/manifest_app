@@ -75,8 +75,6 @@ class AlertDisplay(QWidget):
     def send_alert(self, text, color):
         # If token is allowed, message will be broadcast
         data = {  
-            "user_id": self.user_id,
-            "username": self.username,
             "token": self.token,
             "text": text,
             "color": color
@@ -122,6 +120,10 @@ class AlertDisplay(QWidget):
             # Show the alert message and change window color
             self.display_alert(message, color)
 
+        @self.sio.event
+        def reauthenticate(data):
+            self.init_ui_login()
+
         # Connect to server when AlertDisplay initialized
         self.sio.connect(SERVER_URL)
 
@@ -132,8 +134,8 @@ def main():
     alert_display.init()
 
     # DEMO: Request login
-    #alert_display.connect_login("user1", "password1") #admin
-    alert_display.connect_login("user2", "password2") #user
+    alert_display.connect_login("user1", "password1") #admin
+    #alert_display.connect_login("user2", "password2") #user
 
     # DEMO: Send message
     alert_display.send_alert("I'm alive", "red")
