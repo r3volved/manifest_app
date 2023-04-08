@@ -37,7 +37,8 @@ class DataStore():
 users = DataStore()
 users.init({
     "user1": {"token":None, "password": "password1", "role": 2, "username":"TESTADMIN"},
-    "user2": {"token":None, "password": "password2", "role": 4, "username":"TESTUSER"},
+    "user2": {"token":None, "password": "password2", "role": 4, "username":"TESTUSER2"},
+    "user3": {"token":None, "password": "password3", "role": 4, "username":"TESTUSER3"},
 })
 
 

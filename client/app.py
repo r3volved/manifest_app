@@ -13,9 +13,9 @@ SERVER_URL = "http://localhost:5000/"
 # Define the alert display app class
 class AlertDisplay(QWidget):
     def init(self):
-        self.user_id = None
-        self.role = None
         self.token = None
+        self.role = None
+        self.username = None
         self.init_ui()
 
     def init_ui(self):
@@ -36,14 +36,13 @@ class AlertDisplay(QWidget):
         self.setLayout(layout)
         self.show()
 
-        if self.user_id is None:
+        if self.token is None:
             self.init_ui_login()
         else:
             self.init_ui_user(self.user_id, self.role, self.token)
 
-    def init_ui_user(self, user_id, data):
+    def init_ui_user(self, data):
         # Set properties
-        self.user_id = user_id
         self.role = data["role"]
         self.token = data["token"]
         self.username = data["username"]
@@ -80,7 +79,8 @@ class AlertDisplay(QWidget):
             "color": color
         }
         # Send data t server
-        self.sio.emit("send_alert", data)
+        if self.token and self.sio:
+            self.sio.emit("send_alert", data)
 
     def connect_login(self, user_id, password):
         self.display_alert("Logging in...","green")
@@ -88,8 +88,10 @@ class AlertDisplay(QWidget):
         response = requests.post(f"{SERVER_URL}/login", data={"user_id": user_id, "password": password})
         if response.status_code == 200:
             data = response.json()
-            self.init_ui_user(user_id, data)
+            self.init_ui_user(data)
         else:
+            self.init_ui_login()
+            self.display_alert("Invalid credentials","orange")
             print("Invalid user credentials")
 
     def connect_socketio(self):
@@ -134,8 +136,10 @@ def main():
     alert_display.init()
 
     # DEMO: Request login
-    alert_display.connect_login("user1", "password1") #admin
-    #alert_display.connect_login("user2", "password2") #user
+    #alert_display.connect_login("user1", "password1") #admin
+    alert_display.connect_login("user2", "password2") #user
+    #alert_display.connect_login("user3", "password4") #!!bad password
+    #alert_display.connect_login("user4", "password4") #!!bad user
 
     # DEMO: Send message
     alert_display.send_alert("I'm alive", "red")
