@@ -48,6 +48,18 @@ tokens.init({})
 
 
 # Define the login route for the webserver 
+@app.route("/logout", methods=["POST"])
+def logout():
+    token = str(request.form["token"])
+    user_id = tokens.get(token)
+    if user_id:
+        tokens.rem(token)
+        users.edit(user_id, {"token":None})
+        return jsonify({"status": "success"})
+    # Otherwise fail
+    return jsonify({"status": "failed"}), 401
+        
+# Define the login route for the webserver 
 @app.route("/login", methods=["POST"])
 def login():
     # Parse the user ID and password from the login data 
@@ -55,16 +67,11 @@ def login():
     password = request.form["password"]
     # Lookup the user ID requested
     user = users.get(user_id)
-    # If user was found and the password matches, return success and the user role
-    # TODO: Return a token and leverage token for access restriction instead of role
     if user and user["password"] == password:
         tokens.rem(user["token"])
-        token = random.getrandbits(128)
+        token = str(random.getrandbits(128))
         users.edit(user_id, {"token":token})
         tokens.set(token, user_id)
-        debug = "Set new token ("+str(token)+") for user ("+user["username"]+")"
-        print(debug)
-
         return jsonify({"status": "success", "role": user["role"], "token":token, "username":user["username"] })
     # Otherwise fail the login
     return jsonify({"status": "failed"}), 401
@@ -86,7 +93,7 @@ def handle_disconnect():
 # NOTE: This is where the data sent by admin gets re-broadcast out to all the connected users
 @socketio.on("send_alert")
 def handle_send_alert(data):
-    token = data["token"]
+    token = str(data["token"])
     user_id = tokens.get(token)
     if user_id:
         # Token is valid, get user 
@@ -111,7 +118,7 @@ def handle_send_alert(data):
     else:
         # Token is invalid - not found
         emit("rauthenticate", {}, broadcast=False)
-        print("User was not found with this token was not found")
+        print("User was not found with token passed")
 
 
 # Start server on port 5000
