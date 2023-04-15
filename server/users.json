@@ -1,0 +1,26 @@
+{
+"user": {
+"token": "242803256070905082536095059242367769018",
+"password": "pass",
+"role": 1,
+"username": "SUPER"
+},
+"user1": {
+"token": null,
+"password": "password1",
+"role": 2,
+"username": "TESTADMIN"
+},
+"user2": {
+"token": null,
+"password": "password2",
+"role": 4,
+"username": "TESTUSER2"
+},
+"user3": {
+"token": null,
+"password": "password3",
+"role": 4,
+"username": "TESTUSER3"
+}
+}
