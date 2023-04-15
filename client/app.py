@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QFrame, QTextEdit, QFormLayout, QLineEdit, QPushButton, QWidget, QLabel, QVBoxLayout, QSlider
+from PyQt5.QtWidgets import QApplication, QDesktopWidget, QFrame, QRadioButton, QHBoxLayout, QTextEdit, QFormLayout, QLineEdit, QPushButton, QWidget, QLabel, QVBoxLayout, QSlider
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QPalette
 from time import sleep
@@ -34,6 +34,10 @@ class LoginWindow(QWidget):
         self.login_button.setText('Login')
         self.login_button.clicked.connect(self.login)
         self.login_form.addRow(self.login_button)
+        self.exit_button = QPushButton()
+        self.exit_button.setText('Exit')
+        self.exit_button.clicked.connect(self.parent.exit)
+        self.login_form.addRow(self.exit_button)
         self.setLayout(self.login_form)        
 
     def login(self):
@@ -60,6 +64,110 @@ class LoginWindow(QWidget):
         self.parent.role = None
         self.parent.username = None
 
+
+class UserWindow(QWidget):
+    def __init__(self, parent):
+        super().__init__()
+        self.parent = parent
+        self.init_ui()
+
+    def init_ui(self):
+        self.setWindowTitle("Please login")
+        self.setAutoFillBackground(True)
+        self.setWindowModality(Qt.ApplicationModal)
+        self.setFixedWidth(300)
+        self.user_form = QFormLayout()
+
+        # Add opacity slider
+        self.opacity_slider = QSlider(Qt.Horizontal)
+        self.opacity_slider.setValue(100)
+        self.opacity_slider.setMinimum(1)
+        self.opacity_slider.setMaximum(100)
+        self.opacity_slider.setTracking(True)
+        self.opacity_slider.valueChanged.connect(self.change_opacity)
+        self.user_form.addRow(self.opacity_slider)
+
+        # Add message textbox
+        self.message_text = QTextEdit()
+        self.message_text.setPlaceholderText("Enter an alert message...")
+        self.message_text.hide()
+        self.user_form.addRow(self.message_text)
+
+        # Add message broadcast button
+        self.message_send = QPushButton()
+        self.message_send.setText('Broadcast')
+        self.message_send.clicked.connect(self.broadcast)
+        self.message_send.hide()
+        self.user_form.addRow(self.message_send)
+
+        # Add color options
+        self.message_color = QFrame()
+        self.admin_layout = QHBoxLayout()
+        ## Green        
+        self.message_send_green = QRadioButton("Green")
+        self.message_send_green.setChecked(True)
+        self.message_send_green.setStyleSheet("QRadioButton{padding:1em;}QRadioButton:checked{background-color:lightgreen;}")
+        self.admin_layout.addWidget(self.message_send_green)
+        ## Yellow
+        self.message_send_yellow = QRadioButton("Yellow")
+        self.message_send_yellow.setStyleSheet("QRadioButton{padding:1em;}QRadioButton:checked{background-color:yellow;}")
+        self.admin_layout.addWidget(self.message_send_yellow)
+        ## Red
+        self.message_send_red = QRadioButton("Red")
+        self.message_send_red.setStyleSheet("QRadioButton{padding:1em;}QRadioButton:checked{background-color:red;}")
+        self.admin_layout.addWidget(self.message_send_red)
+
+        self.message_color.setLayout(self.admin_layout)
+        self.user_form.addRow(self.message_color)
+        self.message_color.hide()
+
+        # Add logout button
+        self.logout_button = QPushButton()
+        self.logout_button.setText('Logout')
+        self.logout_button.clicked.connect(self.parent.logout)
+        self.user_form.addRow(self.logout_button)
+
+        # Add exit application button
+        self.exit_button = QPushButton()
+        self.exit_button.setText('Exit')
+        self.exit_button.clicked.connect(self.parent.exit)
+        self.user_form.addRow(self.exit_button)
+        self.setLayout(self.user_form)
+
+    def init_user(self):
+        if self.parent.username is not None:
+            self.setWindowTitle(self.parent.username)
+        else:
+            self.setWindowTitle("Please login")
+
+        if self.parent.role is not None and self.parent.role <= 3:
+            self.message_text.show()
+            self.message_send.show()
+            self.message_color.show()
+        else:
+            self.message_text.hide()
+            self.message_send.hide()
+            self.message_color.hide()
+            
+    def broadcast(self):
+        # Get text and color
+        text = self.message_text.toPlainText()
+        color = "green"
+        if self.message_send_red.isChecked():
+            color = "red"
+        elif self.message_send_yellow.isChecked():
+            color = "yellow"
+        # Call parent send_alert
+        self.parent.send_alert(text, color)        
+        self.message_text.clear()
+
+    def change_opacity(self):
+        # Get opacity percent (1-100)
+        value = self.opacity_slider.value()
+        # Call parent change_opacity
+        self.parent.change_opacity(value)
+
+
 class AlertWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -68,15 +176,14 @@ class AlertWindow(QWidget):
         self.role = None
         self.username = None
         self.init_ui()
-        self.user_window = None
+        self.user_display = UserWindow(self)
         self.login_display = LoginWindow(self)
 
     def init_ui(self):
-        self.setWindowTitle('Alert window')
-        self.setFixedWidth(800)
-        self.setFixedHeight(50)
+        self.title = "Alert App"
+        self.setWindowTitle(self.title)
         self.setAutoFillBackground(True)
-        self.setWindowFlag(Qt.FramelessWindowHint)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.layout = QFormLayout()
         self.control_username = QPushButton()
         self.control_username.setText("Login")
@@ -86,25 +193,30 @@ class AlertWindow(QWidget):
         self.alert_label.setText("Welcome")
         self.layout.addRow(self.control_username, self.alert_label)
         self.setLayout(self.layout)        
+        sizeObject = QDesktopWidget().screenGeometry(-1)
+        self.setGeometry(0, 0, sizeObject.width(), 30)
 
     def update_ui(self):
         if self.username:
             self.control_username.setText(self.username)
             self.connect_socketio()
         else:
-            self.control_username.setTExt("Login")                
+            self.control_username.setText("Login")                
 
     def user_menu(self):
         if self.token is None:
             self.login_display.show()
-        # else:
-        #     self.user_window.show()
+        else:
+            self.user_display.init_user()
+            self.user_display.show()
 
     def logout(self):
         if self.sio:
             self.sio.disconnect()
             self.sio = None
         self.login_display.logout()
+        self.login_display.hide()
+        self.user_display.hide()
         self.update_ui()
 
     def change_opacity(self, value):
@@ -118,7 +230,7 @@ class AlertWindow(QWidget):
     def send_alert(self, text, color):
         # If token is allowed, message will be broadcast
         data = {  
-            "token": self.app.token,
+            "token": self.token,
             "text": text,
             "color": color
         }
@@ -166,133 +278,9 @@ class AlertWindow(QWidget):
         # Connect to server when AlertDisplay initialized
         self.sio.connect(SERVER_URL)
 
-
-
-# Define the alert display app class
-class AlertDisplay(QWidget):
-    def __init__(self, app):
-        super().__init__()
-        self.app = app
-        self.app.token = None
-        self.app.role = None
-        self.app.username = None
-
-        # Set some Alert window properties
-        self.resize(400,80)
-        self.setWindowTitle('Alert App')
-        self.setAutoFillBackground(True)
-        self.layout = QVBoxLayout()
-
-        # Add an opacity slider to the Alert window
-        # self.opacity_slider = QSlider(Qt.Horizontal)
-        # self.opacity_slider.valueChanged.connect(self.change_opacity)
-        # self.layout.addWidget(self.opacity_slider)
-
-        # Add a label to the Alert window
-        self.alert_label = QLabel(self)
-        self.alert_label.setAlignment(Qt.AlignCenter)
-        self.alert_label.setWordWrap(True)
-        self.layout.addWidget(self.alert_label)
-
-        self.message_frame = QFrame()
-        self.message_form = QFormLayout()
-        self.message_text = QTextEdit()
-        self.message_text.setPlaceholderText("Enter an alert message...")
-        self.message_form.addRow(self.message_text)
-        self.message_send = QPushButton()
-        self.message_send.setText('Broadcast')
-        # self.message_send.clicked.connect(self.send_message)
-        self.message_form.addRow(self.message_send)
-        self.message_frame.setLayout(self.message_form)
-        self.layout.addWidget(self.message_frame)
-        
-
-        self.logout_frame = QFrame()
-        self.logout_form = None
-        self.layout.addWidget(self.logout_frame)
-        self.setLayout(self.layout)
-
-
-    def init_user(self, data):
-        self.app.role = data["role"]
-        self.app.token = data["token"]
-        self.app.username = data["username"]
-        self.display_alert("Wecome "+self.app.username+"!",'grey')
-        self.connect_socketio()
-        if self.app.role <= 3:
-            self.message_frame.show()
-
-    def send_message(self):
-        # DEMO: Send message
-        message = self.message_text.toPlainText()
-        self.message_text.clear()
-        self.send_alert(message, "red")
-
-    def change_opacity(self, value):
-        # Change the opacity of the Alert window
-        opacity = value / 100
-        # Never set to zero
-        if opacity < 0.1: 
-            opacity = 0.1
-        self.setWindowOpacity(opacity)
-
-    def display_alert(self, text, color):
-        # Display an alert in the label
-        self.alert_label.setText(text)
-        # Change window color
-        palette = self.palette()
-        palette.setColor(QPalette.Background, QColor(color))
-        self.setPalette(palette)
-
-    def send_alert(self, text, color):
-        # If token is allowed, message will be broadcast
-        data = {  
-            "token": self.app.token,
-            "text": text,
-            "color": color
-        }
-        # Send data t server
-        if self.app.token and self.sio:
-            self.sio.emit("send_alert", data)
-
-    def connect_logout(self):
-        self.sio.disconnect()
-        self.app.login_display.logout()
-
-    def connect_socketio(self):
-        # Initialize a websocket client
-        self.sio = socketio.Client()
-
-        @self.sio.event
-        def connect():
-            # Handle connect event
-            self.display_alert("Connected!", "grey")
-            print("Connected to server")
-
-        @self.sio.event
-        def disconnect():
-            # Handle disconnect event
-            self.display_alert("Disconnected!", "grey")
-            print("Disconnected from server")
-
-        @self.sio.event
-        def receive_alert(data):
-            # Handle "receive_alert" event
-            # Note: This is the event fired when server sends message to client
-            # Parse the text and color from message
-            text = data['text']
-            color = data['color']
-            username = data['username']
-            message = username + ": " + text
-            # Show the alert message and change window color
-            self.display_alert(message, color)
-
-        @self.sio.event
-        def reauthenticate(data):
-            self.connect_logout()
-
-        # Connect to server when AlertDisplay initialized
-        self.sio.connect(SERVER_URL)
+    def exit(self):
+        self.logout()
+        quit()
 
 
 def main():
