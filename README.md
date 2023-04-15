@@ -37,11 +37,6 @@ open in the following order with python (windows double click file)
 
 
 ## TODO
-single multi-screen user app
-- login window
-- admin window (recieves messages and with controls to send)
-- normal window (only recieves messages)
-
 server data
 - add a database, connect and store user data there instead of in-code
 
