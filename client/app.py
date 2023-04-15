@@ -2,13 +2,22 @@ import sys
 from PyQt5.QtWidgets import QApplication, QDesktopWidget, QFrame, QRadioButton, QHBoxLayout, QTextEdit, QFormLayout, QLineEdit, QPushButton, QWidget, QLabel, QVBoxLayout, QSlider
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QPalette
-from time import sleep
+from pypref import Preferences
 import requests
 import socketio
+import re
+import json
 
-# Initialize the server URL to connect
-# TODO: Move this to a config file
-SERVER_URL = "http://localhost:5000/"
+# Return filename prefixed with client path
+def local_file(filename):
+    return re.sub("app\.py$", filename, __file__)
+
+# Open and parse the config json
+with open(local_file("config.json"), 'r') as f:
+    config = json.load(f)
+
+# Map config stuff into constants for clarity
+SERVER_URL = config["SERVER_URL"]
 
 # Define the login window
 class LoginWindow(QWidget):
@@ -47,24 +56,15 @@ class LoginWindow(QWidget):
             response = requests.post(f"{SERVER_URL}/login", data={"user_id": user_id, "password": password})
             if response.status_code == 200:
                 data = response.json()
-                self.parent.token = data["token"]
-                self.parent.role = data["role"]
-                self.parent.username = data["username"]
-                self.parent.display_alert("Welcome "+self.parent.username,"grey")
+                newuser = { "token":data["token"], "role":data["role"], "username":data["username"] }
+                self.parent.user.update_preferences(newuser)
                 self.parent.update_ui()
                 self.hide()
             else:
                 self.parent.display_alert("Invalid credentials","orange")
                 print("Invalid user credentials")
 
-    def logout(self):
-        if self.parent.token is not None:
-            requests.post(f"{SERVER_URL}/logout", data={"token": self.parent.token})
-        self.parent.token = None
-        self.parent.role = None
-        self.parent.username = None
-
-
+# Define the user profile window
 class UserWindow(QWidget):
     def __init__(self, parent):
         super().__init__()
@@ -72,10 +72,9 @@ class UserWindow(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle("Please login")
         self.setAutoFillBackground(True)
         self.setWindowModality(Qt.ApplicationModal)
-        self.setFixedWidth(300)
+        self.setFixedWidth(500)
         self.user_form = QFormLayout()
 
         # Add opacity slider
@@ -87,39 +86,49 @@ class UserWindow(QWidget):
         self.opacity_slider.valueChanged.connect(self.change_opacity)
         self.user_form.addRow(self.opacity_slider)
 
+        # Add admin frame
+        self.admin_frame = QFrame()
+        self.admin_layout = QFormLayout()
+        self.admin_frame.setStyleSheet("QFrame { border:1px inset grey; padding:0.5em; }")
+        
         # Add message textbox
         self.message_text = QTextEdit()
         self.message_text.setPlaceholderText("Enter an alert message...")
-        self.message_text.hide()
-        self.user_form.addRow(self.message_text)
+        self.message_text.setStyleSheet("QTextEdit { padding:0; }")
+        self.admin_layout.addRow(self.message_text)
 
         # Add message broadcast button
         self.message_send = QPushButton()
         self.message_send.setText('Broadcast')
         self.message_send.clicked.connect(self.broadcast)
-        self.message_send.hide()
-        self.user_form.addRow(self.message_send)
+        self.message_send.setStyleSheet("QPushButton { padding:1em; font-size:2em; font-weight:bold; } QRadioButton:hover { background-color:lightgrey; }")
+        self.admin_layout.addRow(self.message_send)
 
         # Add color options
-        self.message_color = QFrame()
-        self.admin_layout = QHBoxLayout()
+        self.color_frame = QFrame()
+        self.color_layout = QHBoxLayout()
+        self.color_frame.setStyleSheet("QFrame { border:none; padding:0; margin:0; }")
         ## Green        
         self.message_send_green = QRadioButton("Green")
         self.message_send_green.setChecked(True)
-        self.message_send_green.setStyleSheet("QRadioButton{padding:1em;}QRadioButton:checked{background-color:lightgreen;}")
-        self.admin_layout.addWidget(self.message_send_green)
+        self.message_send_green.setStyleSheet("QRadioButton { padding:1em; } QRadioButton:checked { background-color:lightgreen; font-weight:bold; }")
+        self.color_layout.addWidget(self.message_send_green)
         ## Yellow
         self.message_send_yellow = QRadioButton("Yellow")
-        self.message_send_yellow.setStyleSheet("QRadioButton{padding:1em;}QRadioButton:checked{background-color:yellow;}")
-        self.admin_layout.addWidget(self.message_send_yellow)
+        self.message_send_yellow.setStyleSheet("QRadioButton { padding:1em; } QRadioButton:checked { background-color:yellow; font-weight:bold; }")
+        self.color_layout.addWidget(self.message_send_yellow)
         ## Red
         self.message_send_red = QRadioButton("Red")
-        self.message_send_red.setStyleSheet("QRadioButton{padding:1em;}QRadioButton:checked{background-color:red;}")
-        self.admin_layout.addWidget(self.message_send_red)
+        self.message_send_red.setStyleSheet("QRadioButton { padding:1em; } QRadioButton:checked { background-color:red; font-weight:bold; }")
+        self.color_layout.addWidget(self.message_send_red)
 
-        self.message_color.setLayout(self.admin_layout)
-        self.user_form.addRow(self.message_color)
-        self.message_color.hide()
+        self.color_frame.setLayout(self.color_layout)
+        self.admin_layout.addRow(self.color_frame)
+        self.color_frame.hide()
+
+        self.admin_frame.setLayout(self.admin_layout)
+        self.user_form.addRow(self.admin_frame)
+        self.admin_frame.hide()
 
         # Add logout button
         self.logout_button = QPushButton()
@@ -135,19 +144,17 @@ class UserWindow(QWidget):
         self.setLayout(self.user_form)
 
     def init_user(self):
-        if self.parent.username is not None:
-            self.setWindowTitle(self.parent.username)
+        if self.parent.user.get("username") is not None:
+            self.setWindowTitle(self.parent.user.get("username"))
         else:
             self.setWindowTitle("Please login")
 
-        if self.parent.role is not None and self.parent.role <= 3:
-            self.message_text.show()
-            self.message_send.show()
-            self.message_color.show()
+        if self.parent.user.get("role") is not None and self.parent.user.get("role") <= 3:
+            self.admin_frame.show()
+            self.color_frame.show()
         else:
-            self.message_text.hide()
-            self.message_send.hide()
-            self.message_color.hide()
+            self.admin_frame.hide()
+            self.color_frame.hide()
             
     def broadcast(self):
         # Get text and color
@@ -167,15 +174,14 @@ class UserWindow(QWidget):
         # Call parent change_opacity
         self.parent.change_opacity(value)
 
-
+# Define the main alert bar
 class AlertWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.sio = None
-        self.token = None
-        self.role = None
-        self.username = None
+        self.user = Preferences(filename="manifest_cache.py")
         self.init_ui()
+        self.update_ui()
         self.user_display = UserWindow(self)
         self.login_display = LoginWindow(self)
 
@@ -197,27 +203,36 @@ class AlertWindow(QWidget):
         self.setGeometry(0, 0, sizeObject.width(), 30)
 
     def update_ui(self):
-        if self.username:
-            self.control_username.setText(self.username)
+        if self.user.get("username"):
+            self.control_username.setText(self.user.get("username"))
             self.connect_socketio()
         else:
             self.control_username.setText("Login")                
 
+    # Open the login window if no session, otherwise open user window
     def user_menu(self):
-        if self.token is None:
+        if self.user.get("token") is None:
             self.login_display.show()
         else:
             self.user_display.init_user()
             self.user_display.show()
 
-    def logout(self):
+    # Only disconnect from websocket - user session persists 
+    def disconnect(self):
         if self.sio:
             self.sio.disconnect()
             self.sio = None
-        self.login_display.logout()
+
+    # Disconnect from websocket and then flush user from client and server
+    def logout(self):
+        self.disconnect()
+        if self.user.get("token") is not None:
+            requests.post(f"{SERVER_URL}/logout", data={"token": self.user.get("token")})
+        reset = { "token":None, "role":None, "username":None }
+        self.user.update_preferences(reset)
+        self.update_ui()
         self.login_display.hide()
         self.user_display.hide()
-        self.update_ui()
 
     def change_opacity(self, value):
         # Change the opacity of the Alert window
@@ -230,12 +245,12 @@ class AlertWindow(QWidget):
     def send_alert(self, text, color):
         # If token is allowed, message will be broadcast
         data = {  
-            "token": self.token,
+            "token": self.user.get("token"),
             "text": text,
             "color": color
         }
         # Send data t server
-        if self.token and self.sio:
+        if self.user.get("token") and self.sio:
             self.sio.emit("send_alert", data)
 
     def display_alert(self, text, color):
@@ -253,13 +268,12 @@ class AlertWindow(QWidget):
 
             @self.sio.event
             def connect():
-                self.display_alert("Connected!", "grey")
-                # print("Connected to server")
+                self.display_alert("Connected!", "lightgrey")
+                self.sio.emit("validate", { "token":self.user.get("token") })
 
             @self.sio.event
             def disconnect():
-                self.display_alert("Disconnected!", "grey")
-                # print("Disconnected from server")
+                self.display_alert("Disconnected!", "orange")
 
             @self.sio.event
             def receive_alert(data):
@@ -272,19 +286,22 @@ class AlertWindow(QWidget):
             @self.sio.event
             def reauthenticate(data):
                 self.logout()
-                self.display_alert("Please login again", "grey")
-                # print("Reauthenticate with server")
+                self.display_alert("Please reauthentiate", "orange")
+
+            @self.sio.event
+            def validate(data):
+                self.sio.emit("validate", { "token":self.user.get("token") })
 
         # Connect to server when AlertDisplay initialized
         self.sio.connect(SERVER_URL)
 
+    # Disconnect and exit application - user session persists
     def exit(self):
-        self.logout()
+        self.disconnect()
         quit()
 
-
+# Initialize the app
 def main():
-    # Initialize the app
     app = QApplication(sys.argv)
     alert_display = AlertWindow()
     alert_display.show()
