@@ -7,7 +7,7 @@ import json
 
 # Return filename prefixed with client path
 def local_file(filename):
-    return re.sub("app\.py$", filename, __file__)
+    return re.sub("(app\.py)$", filename, __file__)
 
 # Open and parse the config json
 with open(local_file("config.json"), 'r') as f:
@@ -16,6 +16,7 @@ with open(local_file("config.json"), 'r') as f:
 # Map config stuff into constants for clarity
 PORT = config["PORT"]
 USER_STORE = config["USER_STORE"]
+DATA_STORE = config["DATA_STORE"]
 TOKEN_STORE = config["TOKEN_STORE"]
 
 # Initialize the flask webserver
@@ -23,7 +24,7 @@ app = Flask(__name__)
 
 # Initialize the websocket server
 socketio = SocketIO(app, cors_allowed_origins="*")
-
+ 
 # Simple data store model
 # Scale this with more appropriate data storage
 class DataStore():
@@ -96,12 +97,25 @@ class DataStore():
 users = DataStore()
 users.init(USER_STORE)
 
-
 # Token store - used for maintaining and authenticating sessions
 tokens = DataStore()
 tokens.init(TOKEN_STORE)
 # tokens.reset()
 
+# Supporting data store - alerts
+support_data = DataStore()
+support_data.init(DATA_STORE)
+
+def get_user(token):
+    user_id = tokens.get(token)
+    if user_id is None:
+        return None
+    
+    user = users.get(user_id)
+    if user is None or user["token"] != token:
+        return None
+    
+    return user
 
 # Define the login route for the webserver 
 @app.route("/logout", methods=["POST"])
@@ -149,26 +163,17 @@ def handle_disconnect():
 @socketio.on("validate")
 def handle_validate(data):
     token = str(data["token"])
-    user_id = tokens.get(token)
-    if user_id is None:
+    user = get_user(token)
+    if user is None:
         return emit("reauthenticate", {}, broadcast=False)
-    
-    user = users.get(user_id)
-    if user is None or user["token"] != token:
-        return emit("reauthenticate", {}, broadcast=False)
-    
 
 # Define the routine to run when a "send_alert" request is sent by user
 # NOTE: This is where the data sent by admin gets re-broadcast out to all the connected users
 @socketio.on("send_alert")
 def handle_send_alert(data):
     token = str(data["token"])
-    user_id = tokens.get(token)
-    if user_id is None:
-        return emit("reauthenticate", {}, broadcast=False)
-    
-    user = users.get(user_id)
-    if user is None or user["token"] != token:
+    user = get_user(token)
+    if user is None:
         return emit("reauthenticate", {}, broadcast=False)
 
     if user["role"] <= 3:
@@ -179,6 +184,7 @@ def handle_send_alert(data):
             "username":user["username"]
         }
         emit("receive_alert", message, broadcast=True)
+        print("Broadcasting alert from "+user["username"])
     else:
         # User was found but does not have permission to broadcast
         message = {
@@ -189,7 +195,16 @@ def handle_send_alert(data):
         emit("receive_alert", message, broadcast=False)
         print("User does not have permission to send alerts")
 
+@socketio.on("get_alerts")
+def handle_get_alerts(data):
+    token = str(data["token"])
+    user = get_user(token)
+    if user is None:
+        return emit("reauthenticate", {}, broadcast=False)
 
-# Start server on port 5000
+    emit("alert_list", support_data.get("alerts"), broadcast=False)
+    print("Sending alerts to "+user["username"])
+
+# Start server on port 5000 
 if __name__ == "__main__":
     socketio.run(app, host="0.0.0.0", port=PORT, debug=True)
