@@ -16,7 +16,7 @@ python.exe
 pip install flask flask-socketio requests simple-websocket pypref
 
 ### Client
-pip install PyQt5 websocket-client pypref
+pip install PyQt5 websocket-client pypref pygame gtts
 ..there was something else I think it told me to pip install for client. it will prompt you to install when you run
 
 

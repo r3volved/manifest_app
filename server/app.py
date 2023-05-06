@@ -1,3 +1,5 @@
+import sys
+import os
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit
 from pypref import Preferences
@@ -5,9 +7,18 @@ import random
 import re
 import json
 
+if getattr(sys, 'frozen', False):
+    # If the application is run as a bundle, the PyInstaller bootloader
+    # extends the sys module by a flag frozen=True and sets the app 
+    # path into variable _MEIPASS'.
+    application_path = sys._MEIPASS
+else:
+    application_path = os.path.dirname(os.path.abspath(__file__))
+
 # Return filename prefixed with client path
 def local_file(filename):
-    return re.sub("(app\.py)$", filename, __file__)
+    # return re.sub("app\.py$", filename, __file__)
+    return os.path.join(application_path, filename)
 
 # Open and parse the config json
 with open(local_file("config.json"), 'r') as f:
@@ -106,6 +117,10 @@ tokens.init(TOKEN_STORE)
 support_data = DataStore()
 support_data.init(DATA_STORE)
 
+# Online users - nonpersistent dict of users
+online_users = {}
+
+
 def get_user(token):
     user_id = tokens.get(token)
     if user_id is None:
@@ -117,7 +132,7 @@ def get_user(token):
     
     return user
 
-# Define the login route for the webserver 
+# Define the logout route for the webserver 
 @app.route("/logout", methods=["POST"])
 def logout():
     token = str(request.form["token"])
@@ -151,14 +166,16 @@ def login():
 # Define the routine to run when a user connects to the server
 @socketio.on("connect")
 def handle_connect():
+    # Note: Client will validate when connected - event will add or update the online user information there
     print("Client connected")
-
 
 # Define the routine to run when a user disconnects from the server
 @socketio.on("disconnect")
 def handle_disconnect():
     print("Client disconnected")
-
+    # User has disconnected, delete online user info
+    user = online_users.pop(request.sid)
+    emit("online_users_list", list(online_users.values()), broadcast=True)
 
 @socketio.on("validate")
 def handle_validate(data):
@@ -166,6 +183,14 @@ def handle_validate(data):
     user = get_user(token)
     if user is None:
         return emit("reauthenticate", {}, broadcast=False)
+    else:
+        # User has connected and validated, set online user info
+        online_users[request.sid] = { 
+            "name":user.get('username'), 
+            "icon":user.get('icon'),
+            "color":user.get('color'),
+        }
+        emit("online_users_list", list(online_users.values()), broadcast=True)
 
 # Define the routine to run when a "send_alert" request is sent by user
 # NOTE: This is where the data sent by admin gets re-broadcast out to all the connected users
@@ -205,6 +230,16 @@ def handle_get_alerts(data):
     emit("alert_list", support_data.get("alerts"), broadcast=False)
     print("Sending alerts to "+user["username"])
 
+@socketio.on("get_online_users")
+def handle_get_online_users(data):
+    token = str(data["token"])
+    user = get_user(token)
+    if user is None:
+        return emit("reauthenticate", {}, broadcast=False)
+
+    emit("online_users_list", list(online_users.values()), broadcast=False)
+    print("Sending online users to " + user["username"])
+    
 # Start server on port 5000 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=PORT, debug=True)
+    socketio.run(app, host="0.0.0.0", port=PORT, debug=False)
