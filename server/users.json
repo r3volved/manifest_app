@@ -3,7 +3,8 @@
 "token": "44975071125336575843419347993549844871",
 "password": "pass",
 "role": 1,
-"username": "SUPER"
+"username": "SUPER",
+"icon":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"50\" fill=\"orange\" /></svg>"
 },
 "user1": {
 "token": null,
