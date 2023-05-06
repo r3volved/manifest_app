@@ -8,7 +8,7 @@
         "index":1,
         "text":"All clear",
         "color":"lightgreen",
-        "shortcut":"Ctrl+Shift+A"
+        "shortcut":null
     },{
         "index":1,
         "text":"Enemy down",

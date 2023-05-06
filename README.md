@@ -13,11 +13,10 @@ python.exe
 ## install libraries
 
 ### Server
-pip install flask flask-socketio requests
-pip install simple-websocket
+pip install flask flask-socketio requests simple-websocket pypref
 
 ### Client
-pip install PyQt5
+pip install PyQt5 websocket-client pypref pygame gtts
 ..there was something else I think it told me to pip install for client. it will prompt you to install when you run
 
 
@@ -38,11 +37,6 @@ open in the following order with python (windows double click file)
 
 
 ## TODO
-single multi-screen user app
-- login window
-- admin window (recieves messages and with controls to send)
-- normal window (only recieves messages)
-
 server data
 - add a database, connect and store user data there instead of in-code
 
