@@ -1,6 +1,6 @@
 import sys
 import os
-from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QToolBar, QSizePolicy, QToolButton, QAction, QDesktopWidget, QFrame, QTabWidget, QRadioButton, QHBoxLayout, QTextEdit, QFormLayout, QLineEdit, QPushButton, QWidget, QLabel, QVBoxLayout, QSlider
+from PyQt5.QtWidgets import QApplication, QMainWindow, QDialog, QMenu, QToolBar, QSizePolicy, QToolButton, QAction, QDesktopWidget, QFrame, QTabWidget, QRadioButton, QHBoxLayout, QTextEdit, QFormLayout, QLineEdit, QPushButton, QWidget, QLabel, QVBoxLayout, QSlider
 from PyQt5.QtCore import Qt, QObject, pyqtSignal, QCoreApplication, QTimeLine
 from PyQt5.QtGui import QColor, QPalette, QIcon, QPixmap, QPainter, QFontMetrics
 from PyQt5.QtSvg import QSvgRenderer
@@ -15,6 +15,7 @@ from gtts import gTTS
 #from playsound import playsound
 import pygame
 import time
+import io
 
 if getattr(sys, 'frozen', False):
     # If the application is run as a bundle, the PyInstaller bootloader
@@ -36,19 +37,19 @@ with open(local_file("config.json"), 'r') as f:
 # Map config stuff into constants for clarity
 SERVER_URL = config["SERVER_URL"]
 
+pygame.mixer.init()
+
 # Define the login window
-class LoginWindow(QWidget):
+class LoginWindow(QDialog):
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
         self.init_ui()
-        pygame.init()
-        pygame.mixer.init()
 
     def init_ui(self):
         self.setWindowTitle('Please login')
         self.setAutoFillBackground(True)
-        self.setWindowModality(Qt.ApplicationModal)
+        self.setWindowModality(Qt.WindowModal)
         self.setFixedWidth(300)
         self.login_form = QFormLayout()
         self.login_user = QLineEdit()
@@ -68,22 +69,29 @@ class LoginWindow(QWidget):
         self.login_form.addRow(self.exit_button)
         self.setLayout(self.login_form)
 
+    def focusOutEvent(self, event):
+        # Close the window when it loses focus
+        self.close()
+
     def login(self):
         user_id = self.login_user.text()
         password = self.login_password.text()
         if user_id and password:
+            self.parent.display_alert("Logging in ...","lightgrey")
+            self.hide()
+            QCoreApplication.processEvents()
+
             response = requests.post(f"{SERVER_URL}/login", data={"user_id": user_id, "password": password})
             if response.status_code == 200:
                 data = response.json()
                 newuser = { "token":data["token"], "role":data["role"], "username":data["username"] }
                 self.parent.user.update_preferences(newuser)
                 self.parent.update_ui()
-                self.hide()
             else:
                 self.parent.display_alert("Invalid credentials","orange")
 
 # Define the user profile window
-class UserWindow(QWidget):
+class UserWindow(QDialog):
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
@@ -91,7 +99,7 @@ class UserWindow(QWidget):
 
     def init_ui(self):
         self.setAutoFillBackground(True)
-        self.setWindowModality(Qt.ApplicationModal)
+        self.setWindowModality(Qt.WindowModal)
         self.setFixedWidth(500)
         self.user_form = QFormLayout()
 
@@ -191,6 +199,7 @@ class UserWindow(QWidget):
     def broadcast(self):
         # Get text and color
         text = self.message_text.toPlainText()
+        color = "lightgrey"
         if self.message_send_green.isChecked():
             color = "lightgreen"
         if self.message_send_red.isChecked():
@@ -213,13 +222,14 @@ class UserWindow(QWidget):
         
     def change_volume(self):
         # Get volume percent (0-100)
-        volume = self.volume_slider.value()
+        value = self.volume_slider.value()
         # Call parent change_volume
         self.parent.change_volume(value)
 
 class WebSocket(QObject):
     load_users = pyqtSignal(list)
     load_alerts = pyqtSignal(list)
+    audio_alert = pyqtSignal(str, str)
     display_alert = pyqtSignal(str, str)
     connected = pyqtSignal()
     disconnected = pyqtSignal()
@@ -246,6 +256,7 @@ class WebSocket(QObject):
             username = data['username']
             message = str(username) + ": " + str(text)
             self.display_alert.emit(message, color)
+            self.audio_alert.emit(username, text)
                         
         @self.sio.event
         def reauthenticate(data):
@@ -286,17 +297,18 @@ class AlertWindow(QMainWindow):
         super().__init__()
         self.user = Preferences(filename="manifest_cache.py")
         self.alerts = None
-        self.volume = 100
+        self.init_ui()
+        QCoreApplication.processEvents()
+
         self.ws = WebSocket(self)
         self.ws.load_users.connect(self.populate_users)
         self.ws.load_alerts.connect(self.populate_alerts)
+        self.ws.audio_alert.connect(self.audio_alert)
         self.ws.display_alert.connect(self.display_alert)
         self.ws.disconnected.connect(self.websocket_disconnected)
         self.ws.connected.connect(self.websocket_connected)
         self.user_display = UserWindow(self)
         self.login_display = LoginWindow(self)
-        self.init_ui()
-        self.update_ui()
 
     def init_ui(self):
         self.title = "Alert App"
@@ -358,22 +370,27 @@ class AlertWindow(QMainWindow):
         self.toolbar.addWidget(self.toolbar_container)
 
     def update_ui(self):
+        self.control_users.hide()
+        self.control_alerts.hide()
         if self.user.get("username"):
             self.control_username.setText(self.user.get("username"))
+            self.display_alert("Connecting to mothership ...","lightgrey")
             self.ws.connect()
         else:
+            self.display_alert("Please login ...","lightgrey")
             self.control_username.setText("Login")               
             self.ws.disconnect()
 
     def websocket_connected(self):
         self.display_alert("Connected!", "lightgrey")
+        self.control_users.show()
         if self.alerts is not None:
             self.control_alerts.show()
 
     def websocket_disconnected(self):
         self.display_alert("Disconnected!", "orange")
-        if self.alerts is not None:
-            self.control_alerts.hide()
+        self.control_users.hide()
+        self.control_alerts.hide()
 
     def websocket_toggler(self):
         if self.ws.isConnected():
@@ -397,14 +414,16 @@ class AlertWindow(QMainWindow):
 
     # Disconnect from websocket and then flush user from client and server
     def logout(self):
+        self.login_display.hide()
+        self.user_display.hide()
+        QCoreApplication.processEvents()
+
         self.disconnect()
         if self.user.get("token") is not None:
             requests.post(f"{SERVER_URL}/logout", data={"token": self.user.get("token")})
         reset = { "token":None, "role":None, "username":None }
         self.user.update_preferences(reset)
         self.update_ui()
-        self.login_display.hide()
-        self.user_display.hide()
 
     def change_opacity(self, value):
         # Change the opacity of the Alert window
@@ -487,7 +506,7 @@ class AlertWindow(QMainWindow):
         self.news = delimiter.join(news)
         newsLength = len(text)                  # number of letters in news = frameRange 
         lps = 4                                 # letters per second 
-        dur = newsLength*1000/lps               # duration until the whole string is shown in milliseconds                                          
+        dur = int(newsLength*1000/lps)          # duration until the whole string is shown in milliseconds                                          
         timeLine = QTimeLine(dur)
         timeLine.setFrameRange(0, newsLength) 
         timeLine.start()
@@ -507,17 +526,8 @@ class AlertWindow(QMainWindow):
         string = '{} pressed'.format(text)
         self.alert_label.setText(string)
         
-    # PyInstaller creates a temp folder and stores path in _MEIPASS
-    def resource_path(self, relative_path):
-        try:
-            base_path = sys._MEIPASS
-        except Exception:
-            base_path = os.path.abspath(".")
-        return os.path.join(base_path, relative_path)
-
     # Flash the background color by changing opacity from nothing to everything
     def flash(self, cycles, flash_time, color):
-        self.toolbar.setStyleSheet("background:"+color+";")
         n=0
         for n in range(cycles):
             self.change_opacity(1)
@@ -527,45 +537,48 @@ class AlertWindow(QMainWindow):
         value = self.user_display.opacity_slider.value()
         self.change_opacity(value)
 
+    def audio_alert(self, user, message):
+        tts = gTTS("From "+user+". "+message, lang='en')
+        audio = io.BytesIO()
+        tts.write_to_fp(audio)
+        audio.seek(0)
+        sound = pygame.mixer.Sound(audio)
+        volume = self.user_display.volume_slider.value()
+        sound.set_volume(volume/100)
+        sound.play()
+        
     def display_alert(self, text, color):
-        if not (text == "Connected!" or text == "Disconnected!"):
-            leadtext = "From "
-            message = leadtext + text
-            gTTS(message, lang='en').save(local_file("talky.mp3"))
-
         self.alert_label.setText(text)
         self.toolbar.setStyleSheet("background:"+color+";")
+        QCoreApplication.processEvents()
+
         klaxon = None
-        
+
         if color == "lightgreen":
-            klaxon = pygame.mixer.Sound(self.resource_path(local_file('green_alarm.mp3')))
+            klaxon = pygame.mixer.Sound(local_file('green_alarm.mp3'))
         if color == "blue":
-            klaxon = pygame.mixer.Sound(self.resource_path(local_file('blue_alarm.mp3')))
+            klaxon = pygame.mixer.Sound(local_file('blue_alarm.mp3'))
         if color == "purple":
-            klaxon = pygame.mixer.Sound(self.resource_path(local_file('purple_alarm.mp3')))
+            klaxon = pygame.mixer.Sound(local_file('purple_alarm.mp3'))
         elif color == "yellow":
-            klaxon = pygame.mixer.Sound(self.resource_path(local_file('yellow_alarm.mp3')))
+            klaxon = pygame.mixer.Sound(local_file('yellow_alarm.mp3'))
         elif color == "red":
             self.feed(text)
-            klaxon = pygame.mixer.Sound(self.resource_path(local_file('red_alarm.mp3')))
+            klaxon = pygame.mixer.Sound(local_file('red_alarm.mp3'))
 
         if klaxon:
-            self.flash(4, 0.5, color)
-            # klaxon.set_volume(volume)
+            volume = self.user_display.volume_slider.value()
+            klaxon.set_volume(volume/100)
             klaxon.play()     
-            sound = pygame.mixer.Sound(local_file("talky.mp3"))
+            self.flash(4, 0.5, color)
             
-        if not (text == "Connected!" or text == "Disconnected!"):
-            # sound.set_volume(volume)
-            sound.play()
-            os.unlink(local_file("talky.mp3"))
-
     def closeEvent(self, event):
         self.exit()
         event.accept()
 
     # Disconnect and exit application - user session persists
     def exit(self):
+        pygame.mixer.quit()
         self.disconnect()
         QCoreApplication.quit()
         quit()
@@ -588,6 +601,9 @@ def main():
     app = QApplication(sys.argv)
     alert_display = AlertWindow()
     alert_display.show()
+    QCoreApplication.processEvents()
+
+    alert_display.update_ui()
     app.exec()
 
 # Run "main" function on start

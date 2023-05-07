@@ -1,12 +1,19 @@
 {
     "PORT":5000,
     "USER_STORE":{ 
-        "source":"users.json" 
+        "source":"users.json",
+        "type":"json"
     },
     "TOKEN_STORE":{ 
-        "source":"tokens.py" 
+        "source":"tokens.py",
+        "type":"py" 
     },
     "DATA_STORE":{
-        "source":"data.json"
-    }  
+        "source":"data.json",
+        "type":"json"
+    },
+    "ONLINE_USER_STORE":{
+        "source":{},
+        "type":"dict"
+    }
 }

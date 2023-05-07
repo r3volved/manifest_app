@@ -13,11 +13,10 @@ python.exe
 ## install libraries
 
 ### Server
-pip install flask flask-socketio requests simple-websocket pypref
+pip install flask flask-socketio requests simple-websocket pypref sqlite3 atexit
 
 ### Client
 pip install PyQt5 websocket-client pypref pygame gtts
-..there was something else I think it told me to pip install for client. it will prompt you to install when you run
 
 
 ## run py scripts
