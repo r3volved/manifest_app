@@ -6,6 +6,9 @@ from pypref import Preferences
 import random
 import re
 import json
+import sqlite3
+import atexit
+
 
 if getattr(sys, 'frozen', False):
     # If the application is run as a bundle, the PyInstaller bootloader
@@ -29,6 +32,7 @@ PORT = config["PORT"]
 USER_STORE = config["USER_STORE"]
 DATA_STORE = config["DATA_STORE"]
 TOKEN_STORE = config["TOKEN_STORE"]
+ONLINE_USER_STORE = config["ONLINE_USER_STORE"]
 
 # Initialize the flask webserver
 app = Flask(__name__)
@@ -39,87 +43,152 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 # Simple data store model
 # Scale this with more appropriate data storage
 class DataStore():
-    def init(self, store):
+    def __init__(self, store):
         # TODO: connect to database
         self.source = store["source"]
-        self.isjson = re.search("\.json$", self.source)
-        if self.isjson:
-            # Open and parse the config json
+        self.type = store["type"]
+        self.conn = None
+        if self.type == "dict":
+            if self.source:
+                self.data = self.source #dict
+            else:
+                self.data = {}
+        elif self.type == "py":
+            self.data = Preferences(filename=self.source)
+        elif self.type == "json":
             with open(local_file(self.source), 'r') as f:
                 self.data = json.load(f)
-        else:
-            # Open preferences
-            self.data = Preferences(filename=self.source)
+        elif self.type == "sqlite":
+            self.conn = sqlite3.connect(local_file(self.source))
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    password TEXT NOT NULL,
+                    role INTEGER NOT NULL,
+                    username TEXT NOT NULL,
+                    icon TEXT,
+                    color TEXT,
+                    token TEXT,
+                    last_login TIMESTAMP,
+                    last_connect TIMESTAMP,
+                    last_disconnect TIMESTAMP
+                )
+            ''')
+            self.conn.commit()
 
+    def connected(self):
+        if self.type == "sqlite":
+            return self.conn is not None
+        return True
+            
     def reset(self):
-        # DON'T CLEAR JSON FOR NOW SINCE ITS JUST USERS
-        if self.isjson:
-            # json_object = json.dumps({}, indent=0)
-            # with open(local_file(self.source), "w") as f:
-            #     f.write(json_object)
-            return 
-        else:
+        # No reset for json files
+        # No reset for sqlite
+        if self.type == "dict":
+            self.data = {}
+        elif self.type == "py":
             self.data.set_preferences({})
 
     def get(self, key):
-        return self.data.get(key)
+        if self.type == "dict":
+            return self.data[key]
+        elif self.type == "py":
+            return self.data.get(key)
+        elif self.type == "json":
+            return self.data.get(key)
+        elif self.type == "sqlite":
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT * FROM users WHERE id=?", (key,))
+            result = cursor.fetchone()
+            return result[0] if result else None
 
     def set(self, key, value):
-        if self.isjson:
+        if self.type == "dict":
+            self.data[key] = value
+        elif self.type == "py":
+            update = {}
+            update[key] = value
+            self.data.update_preferences(update)
+        elif self.type == "json":
             self.data[key] = value
             json_object = json.dumps(self.data, indent=0)
             with open(local_file(self.source), "w") as f:
                 f.write(json_object)
-        else:
-            update = {}
-            update[key] = value
-            self.data.update_preferences(update)
-        return value
+        elif self.type == "sqlite":
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO users (
+                    id, password, role, username, icon, color, token,
+                    last_login, last_connect, last_disconnect
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                value["id"], value["password"], value["role"], value["username"],
+                value["icon"], value["color"], value["token"],
+                value["last_login"], value["last_connect"], value["last_disconnect"]
+            ))
+            self.conn.commit()
     
     def rem(self, key):
-        value = self.data.get(key)
-        if self.isjson:
+        if self.type == "dict":
+            del self.data[key]
+        elif self.type == "py":
+            update = {}
+            update[key] = None
+            self.data.update_preferences(update)
+        elif self.type == "json":
             self.data.pop(key,None)
             json_object = json.dumps(self.data, indent=0)
             with open(local_file(self.source), "w") as f:
                 f.write(json_object)
-        else:
-            update = {}
-            update[key] = None
-            self.data.update_preferences(update)
-        return value
+        elif self.type == "sqlite":
+            cursor = self.conn.cursor()
+            cursor.execute("DELETE FROM users WHERE id=?", (key,))
+            self.conn.commit()
 
-    def edit(self, key, newData):
-        data = self.data.get(key)
-        if self.isjson:
-            data.update(newData)
+    def edit(self, key, new_data):
+        if self.type == "dict":
+            self.data[key] = new_data
+        elif self.type == "py":
+            update = {}
+            update[key] = new_data
+            self.data.update_preferences(update)
+        elif self.type == "json":
+            data = self.data.get(key)
+            data.update(new_data)
             self.data[key] = data
             json_object = json.dumps(self.data, indent=0)
             with open(local_file(self.source), "w") as f:
                 f.write(json_object)
-        else:
-            update = {}
-            update[key] = newData
-            self.data.update_preferences(update)
-        return data
+        elif self.type == "sqlite":
+            cursor = self.conn.cursor()
+            cursor.execute("UPDATE users SET value=? WHERE id=?", (new_data, key))
+            self.conn.commit()
+
+    def close(self):
+        if self.type == "sqlite":
+            self.conn.close()
+            self.conn = None
 
 
 # User store - user details, password, role etc
-users = DataStore()
-users.init(USER_STORE)
-
 # Token store - used for maintaining and authenticating sessions
-tokens = DataStore()
-tokens.init(TOKEN_STORE)
-# tokens.reset()
-
 # Supporting data store - alerts
-support_data = DataStore()
-support_data.init(DATA_STORE)
-
-# Online users - nonpersistent dict of users
+# Online users - nonpersistent store of users
+users = DataStore(USER_STORE) 
+tokens = DataStore(TOKEN_STORE)
+support_data = DataStore(DATA_STORE)
+# online_users = DataStore(ONLINE_USER_STORE)
 online_users = {}
+print("Datastores have been connected")
 
+def close():
+    # Disconnect from datastores when server disconnects
+    users.close()
+    tokens.close()
+    support_data.close()
+    # online_users.close()
+    print("Datastores have been closed")
 
 def get_user(token):
     user_id = tokens.get(token)
@@ -144,7 +213,6 @@ def logout():
     # Otherwise fail
     return jsonify({"status": "failed"}), 401
         
-
 # Define the login route for the webserver 
 @app.route("/login", methods=["POST"])
 def login():
@@ -239,7 +307,10 @@ def handle_get_online_users(data):
 
     emit("online_users_list", list(online_users.values()), broadcast=False)
     print("Sending online users to " + user["username"])
-    
+
+
+atexit.register(close)
+
 # Start server on port 5000 
 if __name__ == "__main__":
     socketio.run(app, host="0.0.0.0", port=PORT, debug=False)
