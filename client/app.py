@@ -231,6 +231,7 @@ class WebSocket(QObject):
     load_alerts = pyqtSignal(list)
     audio_alert = pyqtSignal(str, str)
     display_alert = pyqtSignal(str, str)
+    logout = pyqtSignal()
     connected = pyqtSignal()
     disconnected = pyqtSignal()
     def __init__(self, parent):
@@ -260,7 +261,7 @@ class WebSocket(QObject):
                         
         @self.sio.event
         def reauthenticate(data):
-            self.logout()
+            self.logout.emit()
             self.display_alert.emit("Please reauthentiate", "orange")
 
         @self.sio.event
@@ -307,6 +308,7 @@ class AlertWindow(QMainWindow):
         self.ws.display_alert.connect(self.display_alert)
         self.ws.disconnected.connect(self.websocket_disconnected)
         self.ws.connected.connect(self.websocket_connected)
+        self.ws.logout.connect(self.logout)
         self.user_display = UserWindow(self)
         self.login_display = LoginWindow(self)
 
