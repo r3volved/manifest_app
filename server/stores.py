@@ -22,8 +22,8 @@ def local_file(filename):
 class SimpleStore():
     def __init__(self, store):
         # TODO: connect to database
-        self.source = store["source"]
-        self.type = store["type"]
+        self.source = store.get("source")
+        self.type = store.get("type")
         self.conn = None
         if self.type == "dict":
             if self.source:
@@ -147,3 +147,83 @@ class SimpleStore():
             self.conn.close()
             self.conn = None
 
+
+class UserStore():
+    def __init__(self, store):
+        self.source = store.get("source")
+        self.type = store.get("type")
+        self.conn = sqlite3.connect(local_file(self.source), check_same_thread=False)
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                password TEXT NOT NULL,
+                role INTEGER NOT NULL,
+                username TEXT NOT NULL,
+                icon TEXT,
+                color TEXT,
+                token TEXT,
+                last_login TIMESTAMP,
+                last_connect TIMESTAMP,
+                last_disconnect TIMESTAMP
+            )
+        ''')
+        self.conn.commit()
+
+    def connected(self):
+        return self.conn is not None
+            
+    def get(self, id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE id=?", (id,))
+        result = cursor.fetchone()
+        if result:
+            column_names = [description[0] for description in cursor.description]
+            return dict(zip(column_names, result))
+        else:
+            return None
+
+    def set(self, user_data):
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            INSERT OR REPLACE INTO users (
+                id, password, role, username, icon, color, token,
+                last_login, last_connect, last_disconnect
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            user_data.get("id"),
+            user_data.get("password"),
+            user_data.get("role"),
+            user_data.get("username"),
+            user_data.get("icon"),
+            user_data.get("color"),
+            user_data.get("token"),
+            user_data.get("last_login"),
+            user_data.get("last_connect"),
+            user_data.get("last_disconnect")
+        ))
+        self.conn.commit()
+
+    def rem(self, id):
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM users WHERE id=?", (id,))
+        self.conn.commit()
+
+    def edit(self, id, new_data):
+        cursor = self.conn.cursor()
+
+        # Generate the SQL statement
+        columns = ", ".join(f"{key}=?" for key in new_data.keys())
+        sql = f"UPDATE users SET {columns} WHERE id=?"
+
+        # Prepare the values for the SQL statement
+        values = list(new_data.values())
+        values.append(id)
+
+        # Execute the SQL statement
+        cursor.execute(sql, tuple(values))
+        self.conn.commit()
+
+    def close(self):
+        self.conn.close()
+        self.conn = None

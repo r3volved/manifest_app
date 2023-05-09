@@ -6,7 +6,7 @@ import random
 import json
 import atexit
 
-from stores import SimpleStore
+from stores import SimpleStore, UserStore
 
 if getattr(sys, 'frozen', False):
     # If the application is run as a bundle, the PyInstaller bootloader
@@ -36,7 +36,8 @@ app = Flask(__name__)
 # Initialize the websocket server
 socketio = SocketIO(app, cors_allowed_origins="*") 
 # Initialize the user store - user details, password, role etc
-users = SimpleStore(USER_STORE) 
+# users = SimpleStore(USER_STORE) 
+users = UserStore(USER_STORE) 
 # Initialize the token store - used for maintaining and authenticating sessions
 tokens = SimpleStore(TOKEN_STORE)
 # Initialize the data store - alerts
@@ -60,7 +61,7 @@ def get_user(token):
         return None
     
     user = users.get(user_id)
-    if user is None or user["token"] != token:
+    if user is None or user.get("token") != token:
         return None
     
     return user
@@ -85,12 +86,12 @@ def login():
     password = request.form["password"]
     # Lookup the user ID requested
     user = users.get(user_id)
-    if user and user["password"] == password:
-        tokens.rem(user["token"])
+    if user and user.get("password") == password:
+        tokens.rem(user.get("token"))
         token = str(random.getrandbits(128))
         users.edit(user_id, {"token":token})
         tokens.set(token, user_id)
-        return jsonify({"status": "success", "role": user["role"], "token":token, "username":user["username"] })
+        return jsonify({"status": "success", "role": user.get("role"), "token":token, "username":user.get("username") })
     # Otherwise fail the login
     return jsonify({"status": "failed"}), 401
 
@@ -133,15 +134,15 @@ def handle_send_alert(data):
     if user is None:
         return emit("reauthenticate", {}, broadcast=False)
 
-    if user["role"] <= 3:
+    if user.get("role") <= 3:
         # User was found and has permission to broadcast
         message = {
             "text":data["text"],
             "color":data["color"],
-            "username":user["username"]
+            "username":user.get("username")
         }
         emit("receive_alert", message, broadcast=True)
-        print("Broadcasting alert from "+user["username"])
+        print("Broadcasting alert from "+user.get("username"))
     else:
         # User was found but does not have permission to broadcast
         message = {
@@ -160,7 +161,7 @@ def handle_get_alerts(data):
         return emit("reauthenticate", {}, broadcast=False)
 
     emit("alert_list", support_data.get("alerts"), broadcast=False)
-    print("Sending alerts to "+user["username"])
+    print("Sending alerts to "+user.get("username"))
 
 @socketio.on("get_online_users")
 def handle_get_online_users(data):
@@ -170,7 +171,7 @@ def handle_get_online_users(data):
         return emit("reauthenticate", {}, broadcast=False)
 
     emit("online_users_list", list(online_users.values()), broadcast=False)
-    print("Sending online users to " + user["username"])
+    print("Sending online users to " + user.get("username"))
 
 
 atexit.register(close)
