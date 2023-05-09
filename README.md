@@ -41,3 +41,5 @@ server data
 
 rich messages
 - extend communications protocol to send images or links or files or whatever 
+
+TESTING
