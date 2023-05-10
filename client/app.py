@@ -100,7 +100,7 @@ class UserWindow(QDialog):
     def init_ui(self):
         self.setAutoFillBackground(True)
         self.setWindowModality(Qt.WindowModal)
-        self.setFixedWidth(500)
+        self.setFixedWidth(800)
         self.user_form = QFormLayout()
 
         # Add opacity slider
@@ -490,7 +490,7 @@ class AlertWindow(QMainWindow):
             menu.addAction(action)
 
         self.control_alerts.setMenu(menu)
-    
+        self.control_alerts.show()
     #
     # Not sure what this ticker feed thing is supposed to do 
     # but I fixed the runtime errors that were causing client to crash
@@ -529,8 +529,7 @@ class AlertWindow(QMainWindow):
         self.alert_label.setText(string)
         
     # Flash the background color by changing opacity from nothing to everything
-    def flash(self, cycles, flash_time, color):
-        n=0
+    def flash(self, cycles, flash_time):
         for n in range(cycles):
             self.change_opacity(1)
             time.sleep(flash_time/2)
@@ -538,6 +537,14 @@ class AlertWindow(QMainWindow):
             time.sleep(flash_time/2)
         value = self.user_display.opacity_slider.value()
         self.change_opacity(value)
+
+    def setTextColor(self,color): 
+        self.alert_label.setStyleSheet("padding:0.5em 1em; color: "+color+";")
+        self.control_username.setStyleSheet("QToolButton { color: "+color+"; padding:0.5em; } QToolButton::menu-indicator { width:0; height:0; }")
+        self.control_users.setStyleSheet("QToolButton { color: "+color+"; padding:0.5em; } QToolButton::menu-indicator { width:0; height:0; }")
+        self.control_alerts.setStyleSheet("QToolButton { color: "+color+"; padding:0.5em; } QToolButton::menu-indicator { width:0; height:0; }")
+        self.control_exit.setStyleSheet("QToolButton { color: "+color+"; padding:0.5em; } QToolButton::menu-indicator { width:0; height:0; }")
+        QCoreApplication.processEvents()
 
     def audio_alert(self, user, message):
         tts = gTTS("From "+user+". "+message, lang='en')
@@ -552,6 +559,7 @@ class AlertWindow(QMainWindow):
     def display_alert(self, text, color):
         self.alert_label.setText(text)
         self.toolbar.setStyleSheet("background:"+color+";")
+        self.setTextColor("black")
         QCoreApplication.processEvents()
 
         klaxon = None
@@ -560,19 +568,24 @@ class AlertWindow(QMainWindow):
             klaxon = pygame.mixer.Sound(local_file('green_alarm.mp3'))
         if color == "blue":
             klaxon = pygame.mixer.Sound(local_file('blue_alarm.mp3'))
+            self.setTextColor("white")
         if color == "purple":
             klaxon = pygame.mixer.Sound(local_file('purple_alarm.mp3'))
+            self.setTextColor("white")
         elif color == "yellow":
             klaxon = pygame.mixer.Sound(local_file('yellow_alarm.mp3'))
         elif color == "red":
             self.feed(text)
             klaxon = pygame.mixer.Sound(local_file('red_alarm.mp3'))
+            self.setTextColor("white")
+        else:
+            self.feed(text)
 
         if klaxon:
             volume = self.user_display.volume_slider.value()
             klaxon.set_volume(volume/100)
             klaxon.play()     
-            self.flash(4, 0.5, color)
+            self.flash(4, 0.5)
             
     def closeEvent(self, event):
         self.exit()
