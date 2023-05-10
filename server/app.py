@@ -2,13 +2,11 @@ import sys
 import os
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit
-from pypref import Preferences
 import random
-import re
 import json
-import sqlite3
 import atexit
 
+from stores import SimpleStore, UserStore
 
 if getattr(sys, 'frozen', False):
     # If the application is run as a bundle, the PyInstaller bootloader
@@ -20,7 +18,6 @@ else:
 
 # Return filename prefixed with client path
 def local_file(filename):
-    # return re.sub("app\.py$", filename, __file__)
     return os.path.join(application_path, filename)
 
 # Open and parse the config json
@@ -36,150 +33,18 @@ ONLINE_USER_STORE = config["ONLINE_USER_STORE"]
 
 # Initialize the flask webserver
 app = Flask(__name__)
-
 # Initialize the websocket server
-socketio = SocketIO(app, cors_allowed_origins="*")
- 
-# Simple data store model
-# Scale this with more appropriate data storage
-class DataStore():
-    def __init__(self, store):
-        # TODO: connect to database
-        self.source = store["source"]
-        self.type = store["type"]
-        self.conn = None
-        if self.type == "dict":
-            if self.source:
-                self.data = self.source #dict
-            else:
-                self.data = {}
-        elif self.type == "py":
-            self.data = Preferences(filename=self.source)
-        elif self.type == "json":
-            with open(local_file(self.source), 'r') as f:
-                self.data = json.load(f)
-        elif self.type == "sqlite":
-            self.conn = sqlite3.connect(local_file(self.source))
-            cursor = self.conn.cursor()
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    id TEXT PRIMARY KEY,
-                    password TEXT NOT NULL,
-                    role INTEGER NOT NULL,
-                    username TEXT NOT NULL,
-                    icon TEXT,
-                    color TEXT,
-                    token TEXT,
-                    last_login TIMESTAMP,
-                    last_connect TIMESTAMP,
-                    last_disconnect TIMESTAMP
-                )
-            ''')
-            self.conn.commit()
-
-    def connected(self):
-        if self.type == "sqlite":
-            return self.conn is not None
-        return True
-            
-    def reset(self):
-        # No reset for json files
-        # No reset for sqlite
-        if self.type == "dict":
-            self.data = {}
-        elif self.type == "py":
-            self.data.set_preferences({})
-
-    def get(self, key):
-        if self.type == "dict":
-            return self.data[key]
-        elif self.type == "py":
-            return self.data.get(key)
-        elif self.type == "json":
-            return self.data.get(key)
-        elif self.type == "sqlite":
-            cursor = self.conn.cursor()
-            cursor.execute("SELECT * FROM users WHERE id=?", (key,))
-            result = cursor.fetchone()
-            return result[0] if result else None
-
-    def set(self, key, value):
-        if self.type == "dict":
-            self.data[key] = value
-        elif self.type == "py":
-            update = {}
-            update[key] = value
-            self.data.update_preferences(update)
-        elif self.type == "json":
-            self.data[key] = value
-            json_object = json.dumps(self.data, indent=0)
-            with open(local_file(self.source), "w") as f:
-                f.write(json_object)
-        elif self.type == "sqlite":
-            cursor = self.conn.cursor()
-            cursor.execute('''
-                INSERT OR REPLACE INTO users (
-                    id, password, role, username, icon, color, token,
-                    last_login, last_connect, last_disconnect
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                value["id"], value["password"], value["role"], value["username"],
-                value["icon"], value["color"], value["token"],
-                value["last_login"], value["last_connect"], value["last_disconnect"]
-            ))
-            self.conn.commit()
-    
-    def rem(self, key):
-        if self.type == "dict":
-            del self.data[key]
-        elif self.type == "py":
-            update = {}
-            update[key] = None
-            self.data.update_preferences(update)
-        elif self.type == "json":
-            self.data.pop(key,None)
-            json_object = json.dumps(self.data, indent=0)
-            with open(local_file(self.source), "w") as f:
-                f.write(json_object)
-        elif self.type == "sqlite":
-            cursor = self.conn.cursor()
-            cursor.execute("DELETE FROM users WHERE id=?", (key,))
-            self.conn.commit()
-
-    def edit(self, key, new_data):
-        if self.type == "dict":
-            self.data[key] = new_data
-        elif self.type == "py":
-            update = {}
-            update[key] = new_data
-            self.data.update_preferences(update)
-        elif self.type == "json":
-            data = self.data.get(key)
-            data.update(new_data)
-            self.data[key] = data
-            json_object = json.dumps(self.data, indent=0)
-            with open(local_file(self.source), "w") as f:
-                f.write(json_object)
-        elif self.type == "sqlite":
-            cursor = self.conn.cursor()
-            cursor.execute("UPDATE users SET value=? WHERE id=?", (new_data, key))
-            self.conn.commit()
-
-    def close(self):
-        if self.type == "sqlite":
-            self.conn.close()
-            self.conn = None
-
-
-# User store - user details, password, role etc
-# Token store - used for maintaining and authenticating sessions
-# Supporting data store - alerts
-# Online users - nonpersistent store of users
-users = DataStore(USER_STORE) 
-tokens = DataStore(TOKEN_STORE)
-support_data = DataStore(DATA_STORE)
-# online_users = DataStore(ONLINE_USER_STORE)
+socketio = SocketIO(app, cors_allowed_origins="*") 
+# Initialize the user store - user details, password, role etc
+# users = SimpleStore(USER_STORE) 
+users = UserStore(USER_STORE) 
+# Initialize the token store - used for maintaining and authenticating sessions
+tokens = SimpleStore(TOKEN_STORE)
+# Initialize the data store - alerts
+support_data = SimpleStore(DATA_STORE)
+# Initialize the online-users store - nonpersistent store of users
 online_users = {}
+
 print("Datastores have been connected")
 
 def close():
@@ -196,7 +61,7 @@ def get_user(token):
         return None
     
     user = users.get(user_id)
-    if user is None or user["token"] != token:
+    if user is None or user.get("token") != token:
         return None
     
     return user
@@ -221,12 +86,12 @@ def login():
     password = request.form["password"]
     # Lookup the user ID requested
     user = users.get(user_id)
-    if user and user["password"] == password:
-        tokens.rem(user["token"])
+    if user and user.get("password") == password:
+        tokens.rem(user.get("token"))
         token = str(random.getrandbits(128))
         users.edit(user_id, {"token":token})
         tokens.set(token, user_id)
-        return jsonify({"status": "success", "role": user["role"], "token":token, "username":user["username"] })
+        return jsonify({"status": "success", "role": user.get("role"), "token":token, "username":user.get("username") })
     # Otherwise fail the login
     return jsonify({"status": "failed"}), 401
 
@@ -269,15 +134,15 @@ def handle_send_alert(data):
     if user is None:
         return emit("reauthenticate", {}, broadcast=False)
 
-    if user["role"] <= 3:
+    if user.get("role") <= 3:
         # User was found and has permission to broadcast
         message = {
             "text":data["text"],
             "color":data["color"],
-            "username":user["username"]
+            "username":user.get("username")
         }
         emit("receive_alert", message, broadcast=True)
-        print("Broadcasting alert from "+user["username"])
+        print("Broadcasting alert from "+user.get("username"))
     else:
         # User was found but does not have permission to broadcast
         message = {
@@ -296,7 +161,7 @@ def handle_get_alerts(data):
         return emit("reauthenticate", {}, broadcast=False)
 
     emit("alert_list", support_data.get("alerts"), broadcast=False)
-    print("Sending alerts to "+user["username"])
+    print("Sending alerts to "+user.get("username"))
 
 @socketio.on("get_online_users")
 def handle_get_online_users(data):
@@ -306,7 +171,7 @@ def handle_get_online_users(data):
         return emit("reauthenticate", {}, broadcast=False)
 
     emit("online_users_list", list(online_users.values()), broadcast=False)
-    print("Sending online users to " + user["username"])
+    print("Sending online users to " + user.get("username"))
 
 
 atexit.register(close)
