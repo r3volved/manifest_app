@@ -6,7 +6,16 @@ import json
 import sys
 import os
 
-def create_table(cursor, data):
+def dump_data(conn, table_name):
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT * FROM {table_name}")
+    rows = cursor.fetchall()
+
+    print(f"Dumping data from {table_name} table:")
+    for row in rows:
+        print(row)
+
+def create_table(cursor, table_name, data):
     columns = []
     for key, value in data.items():
         if isinstance(value, int):
@@ -17,34 +26,37 @@ def create_table(cursor, data):
             col_type = "TEXT"
         else:
             raise ValueError(f"Unsupported data type for column '{key}': {type(value)}")
-        columns.append(f"{key} {col_type}")
+        columns.append(f'"{key}" {col_type}')
 
     create_table_sql = f"""
-    CREATE TABLE IF NOT EXISTS users (
+    CREATE TABLE IF NOT EXISTS {table_name} (
         id TEXT PRIMARY KEY,
         {', '.join(columns)}
     )
     """
     cursor.execute(create_table_sql)
 
-def insert_data(conn, data):
+def insert_data(conn, table_name, data):
     cursor = conn.cursor()
-    for user_id, user_data in data.items():
-        columns = ["id"] + list(user_data.keys())
+    for record in data:
+        columns = list(record.keys())
         placeholders = ", ".join("?" * len(columns))
-        sql = f"INSERT OR REPLACE INTO users ({', '.join(columns)}) VALUES ({placeholders})"
-        values = [user_id] + list(user_data.values())
+        sql = f"INSERT OR REPLACE INTO {table_name} ({', '.join(columns)}) VALUES ({placeholders})"
+        values = list(record.values())
         cursor.execute(sql, values)
     conn.commit()
 
-def dump_data(conn):
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users")
-    rows = cursor.fetchall()
-
-    print("Dumping data from users table:")
-    for row in rows:
-        print(row)
+def process_data(conn, key, value, default_table_name):
+    if isinstance(value, list):
+        create_table(conn.cursor(), key, value[0])
+        insert_data(conn, key, value)
+        dump_data(conn, key)
+    elif isinstance(value, dict):
+        create_table(conn.cursor(), default_table_name, next(iter(value.values())))
+        insert_data(conn, default_table_name, value)
+        dump_data(conn, default_table_name)
+    else:
+        raise ValueError("Unsupported JSON structure")
 
 def main(json_file_path):
     # Read JSON data
@@ -54,14 +66,11 @@ def main(json_file_path):
     # Create SQLite database
     db_name = os.path.splitext(json_file_path)[0] + ".db"
     conn = sqlite3.connect(db_name)
+    default_table_name = os.path.splitext(os.path.basename(json_file_path))[0]
 
-    # Create table and insert data
-    cursor = conn.cursor()
-    create_table(cursor, next(iter(data.values())))
-    insert_data(conn, data)
-
-    # Dump data from the users table
-    dump_data(conn)
+    # Process JSON data
+    for key, value in data.items():
+        process_data(conn, key, value, default_table_name)
 
     # Close the database connection
     conn.close()
