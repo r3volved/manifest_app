@@ -36,7 +36,6 @@ app = Flask(__name__)
 # Initialize the websocket server
 socketio = SocketIO(app, cors_allowed_origins="*") 
 # Initialize the user store - user details, password, role etc
-# users = SimpleStore(USER_STORE) 
 users = UserStore(USER_STORE) 
 # Initialize the token store - used for maintaining and authenticating sessions
 tokens = SimpleStore(TOKEN_STORE)

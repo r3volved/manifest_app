@@ -1,16 +1,19 @@
 {
     "alerts":[{
-        "index":2,
+        "id":1,
+        "sort_index":2,
         "text":"Base is under attack",
         "color":"red",
         "shortcut":null
     },{
-        "index":1,
+        "id":2,
+        "sort_index":1,
         "text":"All clear",
         "color":"lightgreen",
         "shortcut":null
     },{
-        "index":1,
+        "id":3,
+        "sort_index":1,
         "text":"Enemy down",
         "color":"lightgreen",
         "shortcut":null

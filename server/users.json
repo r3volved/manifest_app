@@ -6,7 +6,11 @@
             "password": "pass",
             "role": 1,
             "username": "SUPER",
-            "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"50\" fill=\"orange\" /></svg>"
+            "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"50\" fill=\"orange\" /></svg>",
+            "color":"blue",
+            "last_login":"2023-05-12T19:31:25.110Z",
+            "last_connect":"2023-05-12T19:31:25.110Z",
+            "last_disconnect":"2023-05-12T19:36:32.745668+00:00"
         },
         {
             "id":"user1",

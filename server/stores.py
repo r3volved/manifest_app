@@ -35,28 +35,8 @@ class SimpleStore():
         elif self.type == "json":
             with open(local_file(self.source), 'r') as f:
                 self.data = json.load(f)
-        elif self.type == "sqlite":
-            self.conn = sqlite3.connect(local_file(self.source))
-            cursor = self.conn.cursor()
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    id TEXT PRIMARY KEY,
-                    password TEXT NOT NULL,
-                    role INTEGER NOT NULL,
-                    username TEXT NOT NULL,
-                    icon TEXT,
-                    color TEXT,
-                    token TEXT,
-                    last_login TIMESTAMP,
-                    last_connect TIMESTAMP,
-                    last_disconnect TIMESTAMP
-                )
-            ''')
-            self.conn.commit()
 
     def connected(self):
-        if self.type == "sqlite":
-            return self.conn is not None
         return True
             
     def reset(self):
@@ -74,11 +54,6 @@ class SimpleStore():
             return self.data.get(key)
         elif self.type == "json":
             return self.data.get(key)
-        elif self.type == "sqlite":
-            cursor = self.conn.cursor()
-            cursor.execute("SELECT * FROM users WHERE id=?", (key,))
-            result = cursor.fetchone()
-            return result[0] if result else None
 
     def set(self, key, value):
         if self.type == "dict":
@@ -92,19 +67,6 @@ class SimpleStore():
             json_object = json.dumps(self.data, indent=0)
             with open(local_file(self.source), "w") as f:
                 f.write(json_object)
-        elif self.type == "sqlite":
-            cursor = self.conn.cursor()
-            cursor.execute('''
-                INSERT OR REPLACE INTO users (
-                    id, password, role, username, icon, color, token,
-                    last_login, last_connect, last_disconnect
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                value["id"], value["password"], value["role"], value["username"],
-                value["icon"], value["color"], value["token"],
-                value["last_login"], value["last_connect"], value["last_disconnect"]
-            ))
-            self.conn.commit()
     
     def rem(self, key):
         if self.type == "dict":
@@ -118,10 +80,6 @@ class SimpleStore():
             json_object = json.dumps(self.data, indent=0)
             with open(local_file(self.source), "w") as f:
                 f.write(json_object)
-        elif self.type == "sqlite":
-            cursor = self.conn.cursor()
-            cursor.execute("DELETE FROM users WHERE id=?", (key,))
-            self.conn.commit()
 
     def edit(self, key, new_data):
         if self.type == "dict":
@@ -137,16 +95,9 @@ class SimpleStore():
             json_object = json.dumps(self.data, indent=0)
             with open(local_file(self.source), "w") as f:
                 f.write(json_object)
-        elif self.type == "sqlite":
-            cursor = self.conn.cursor()
-            cursor.execute("UPDATE users SET value=? WHERE id=?", (new_data, key))
-            self.conn.commit()
 
     def close(self):
-        if self.type == "sqlite":
-            self.conn.close()
-            self.conn = None
-
+        return True
 
 class UserStore():
     def __init__(self, store):
@@ -163,9 +114,9 @@ class UserStore():
                 icon TEXT,
                 color TEXT,
                 token TEXT,
-                last_login TIMESTAMP,
-                last_connect TIMESTAMP,
-                last_disconnect TIMESTAMP
+                last_login TEXT,
+                last_connect TEXT,
+                last_disconnect TEXT
             )
         ''')
         self.conn.commit()
