@@ -12,11 +12,11 @@ python.exe
 
 ## install libraries
 
-### Server
-pip install flask flask-socketio requests simple-websocket pypref sqlite3 atexit
+### Server  
+pip install flask flask-socketio requests simple-websocket pypref sqlite3 atexit bcrypt
 
 ### Client
-pip install PyQt5 websocket-client pypref pygame gtts
+pip install PyQt5 websocket-client pypref pygame gtts 
 
 
 ## run py scripts
