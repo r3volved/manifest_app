@@ -1,75 +1,93 @@
-# Turn a simple json structure into an sqlite database 
-# Assumes the top level json keys represent values for the ID field
-
-import sqlite3
 import json
-import sys
+import sqlite3
 import os
+import sys
+import bcrypt
 
-def create_table(cursor, data):
-    columns = []
-    for key, value in data.items():
-        if isinstance(value, int):
-            col_type = "INTEGER"
-        elif isinstance(value, str):
-            col_type = "TEXT"
-        elif value is None:
-            col_type = "TEXT"
-        else:
-            raise ValueError(f"Unsupported data type for column '{key}': {type(value)}")
-        columns.append(f"{key} {col_type}")
+from typing import Dict, Any
 
-    create_table_sql = f"""
-    CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        {', '.join(columns)}
-    )
-    """
-    cursor.execute(create_table_sql)
+def dump_data(cursor, table_name):
+    print(f"Dumping data from {table_name} table:")
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    column_info = cursor.fetchall()
+    
+    # column[1] contains the column name
+    column_names = [column[1] for column in column_info]
+    print(f"{', '.join(column_names)}")
 
-def insert_data(conn, data):
-    cursor = conn.cursor()
-    for user_id, user_data in data.items():
-        columns = ["id"] + list(user_data.keys())
-        placeholders = ", ".join("?" * len(columns))
-        sql = f"INSERT OR REPLACE INTO users ({', '.join(columns)}) VALUES ({placeholders})"
-        values = [user_id] + list(user_data.values())
-        cursor.execute(sql, values)
-    conn.commit()
-
-def dump_data(conn):
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users")
+    # column[2] contains the data type
+    column_types = [column[2] for column in column_info]
+    print(f"{', '.join(column_types)}")
+        
+    cursor.execute(f"SELECT * FROM {table_name}")
     rows = cursor.fetchall()
-
-    print("Dumping data from users table:")
     for row in rows:
         print(row)
 
-def main(json_file_path):
-    # Read JSON data
-    with open(json_file_path, "r") as json_file:
-        data = json.load(json_file)
+def infer_datatype(value):
+    if isinstance(value, int):
+        return 'INTEGER'
+    elif isinstance(value, float):
+        return 'REAL'
+    elif isinstance(value, bool):
+        return 'BOOLEAN'
+    elif isinstance(value, str):
+        return 'TEXT'
+    else:
+        return 'TEXT'
 
-    # Create SQLite database
-    db_name = os.path.splitext(json_file_path)[0] + ".db"
-    conn = sqlite3.connect(db_name)
+def accumulate_columns(data: Dict[str, Any]) -> Dict[str, Any]:
+    columns = {}
+    for table_name, records in data.items():
+        for record in records:
+            if table_name not in columns:
+                columns[table_name] = {}
+            for col, val in record.items():
+                columns[table_name][col] = infer_datatype(val)
+    return columns
 
-    # Create table and insert data
-    cursor = conn.cursor()
-    create_table(cursor, next(iter(data.values())))
-    insert_data(conn, data)
+def create_tables(cursor, columns: Dict[str, Any]) -> None:
+    for table_name, column_info in columns.items():
+        cols = ', '.join([f'"{col}" {datatype} {("PRIMARY KEY" if col=="id" else "")}' for col, datatype in column_info.items()])
+        cursor.execute(f'CREATE TABLE IF NOT EXISTS "{table_name}" ({cols});')
 
-    # Dump data from the users table
-    dump_data(conn)
+def hash_password(password: str) -> bytes:
+    password = password.encode('utf-8')  # Passwords should be bytes
+    salt = bcrypt.gensalt()  # Generate a random salt
+    return bcrypt.hashpw(password, salt)  # Hash the password
 
-    # Close the database connection
-    conn.close()
+def insert_records(cursor, data: Dict[str, Any], columns: Dict[str, Any]) -> None:
+    for table_name, records in data.items():
+        for record in records:
+            values = []
+            for col in columns[table_name].keys():
+                value = record.get(col, None)
+                if col == "password" and value is not None:
+                    value = hash_password(value)
+                values.append(value)
+            
+            column_names = ', '.join([f'"{col}"' for col in columns[table_name].keys()])
+            cursor.execute(f'INSERT INTO "{table_name}" ({column_names}) VALUES ({",".join("?"*len(values))});', values)
+        dump_data(cursor, table_name)
+
+def json_to_sqlite(json_filename: str, db_filename: str) -> None:
+    with open(json_filename, 'r') as f:
+        data = json.load(f)
+    
+    columns = accumulate_columns(data)
+
+    with sqlite3.connect(db_filename) as conn:
+        cursor = conn.cursor()
+        create_tables(cursor, columns)
+        conn.commit()
+        insert_records(cursor, data, columns)
+        conn.commit()
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python json_to_sqlite.py <json_file_path>")
         sys.exit(1)
 
-    json_file_path = sys.argv[1]
-    main(json_file_path)
+    json_filename = sys.argv[1]
+    db_filename = os.path.splitext(json_filename)[0] + '.db'
+    json_to_sqlite(json_filename, db_filename)
