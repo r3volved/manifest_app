@@ -56,18 +56,43 @@ def hash_password(password: str) -> bytes:
     salt = bcrypt.gensalt()  # Generate a random salt
     return bcrypt.hashpw(password, salt)  # Hash the password
 
-def insert_records(cursor, data: Dict[str, Any], columns: Dict[str, Any]) -> None:
+def insert_or_update_records(cursor, data: Dict[str, Any], columns: Dict[str, Any]) -> None:
     for table_name, records in data.items():
         for record in records:
-            values = []
-            for col in columns[table_name].keys():
-                value = record.get(col, None)
-                if col == "password" and value is not None:
-                    value = hash_password(value)
-                values.append(value)
-            
-            column_names = ', '.join([f'"{col}"' for col in columns[table_name].keys()])
-            cursor.execute(f'INSERT INTO "{table_name}" ({column_names}) VALUES ({",".join("?"*len(values))});', values)
+            cursor.execute(f'SELECT * FROM "{table_name}" WHERE id=?;', (record['id'],))
+            existing_record = cursor.fetchone()
+
+            if existing_record is None:
+                # Record does not exist, insert new record
+                values = []
+                for col in columns[table_name].keys():
+                    value = record.get(col, None)
+                    if col == "password" and value is not None:
+                        value = hash_password(value)
+                    values.append(value)
+
+                column_names = ', '.join([f'"{col}"' for col in columns[table_name].keys()])
+                cursor.execute(f'INSERT INTO "{table_name}" ({column_names}) VALUES ({",".join("?"*len(values))});', values)
+            else:
+                # Record exists, update record (skip id and password fields)
+                set_clauses = []
+                values = []
+                for col in columns[table_name].keys():
+                    if col == "id":
+                        # Skip id field since we matched
+                        continue
+
+                    if col == "password":
+                        # Skip password field since we matched
+                        continue
+
+                    value = record.get(col, None)
+                    set_clauses.append(f'"{col}" = ?')
+                    values.append(value)
+
+                values.append(record['id'])
+                cursor.execute(f'UPDATE "{table_name}" SET {", ".join(set_clauses)} WHERE id=?;', values)
+
         dump_data(cursor, table_name)
 
 def json_to_sqlite(json_filename: str, db_filename: str) -> None:
@@ -80,7 +105,7 @@ def json_to_sqlite(json_filename: str, db_filename: str) -> None:
         cursor = conn.cursor()
         create_tables(cursor, columns)
         conn.commit()
-        insert_records(cursor, data, columns)
+        insert_or_update_records(cursor, data, columns)
         conn.commit()
 
 if __name__ == "__main__":
