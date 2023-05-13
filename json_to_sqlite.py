@@ -2,6 +2,8 @@ import json
 import sqlite3
 import os
 import sys
+import bcrypt
+
 from typing import Dict, Any
 
 def dump_data(cursor, table_name):
@@ -49,11 +51,22 @@ def create_tables(cursor, columns: Dict[str, Any]) -> None:
         cols = ', '.join([f'"{col}" {datatype} {("PRIMARY KEY" if col=="id" else "")}' for col, datatype in column_info.items()])
         cursor.execute(f'CREATE TABLE IF NOT EXISTS "{table_name}" ({cols});')
 
+def hash_password(password: str) -> bytes:
+    password = password.encode('utf-8')  # Passwords should be bytes
+    salt = bcrypt.gensalt()  # Generate a random salt
+    return bcrypt.hashpw(password, salt)  # Hash the password
+
 def insert_records(cursor, data: Dict[str, Any], columns: Dict[str, Any]) -> None:
     for table_name, records in data.items():
         for record in records:
+            values = []
+            for col in columns[table_name].keys():
+                value = record.get(col, None)
+                if col == "password" and value is not None:
+                    value = hash_password(value)
+                values.append(value)
+            
             column_names = ', '.join([f'"{col}"' for col in columns[table_name].keys()])
-            values = [record.get(col, None) for col in columns[table_name].keys()]
             cursor.execute(f'INSERT INTO "{table_name}" ({column_names}) VALUES ({",".join("?"*len(values))});', values)
         dump_data(cursor, table_name)
 

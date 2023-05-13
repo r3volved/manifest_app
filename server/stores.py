@@ -104,22 +104,6 @@ class UserStore():
         self.source = store.get("source")
         self.type = store.get("type")
         self.conn = sqlite3.connect(local_file(self.source), check_same_thread=False)
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id TEXT PRIMARY KEY,
-                password TEXT NOT NULL,
-                role INTEGER NOT NULL,
-                username TEXT NOT NULL,
-                icon TEXT,
-                color TEXT,
-                token TEXT,
-                last_login TEXT,
-                last_connect TEXT,
-                last_disconnect TEXT
-            )
-        ''')
-        self.conn.commit()
 
     def connected(self):
         return self.conn is not None
