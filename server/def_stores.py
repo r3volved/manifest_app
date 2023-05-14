@@ -107,7 +107,26 @@ class UserStore():
 
     def connected(self):
         return self.conn is not None
-            
+    
+    def get_profile(self, id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT id, role, username, icon, color, last_login, last_connect, last_disconnect FROM users WHERE id=?", (id,))
+        result = cursor.fetchone()
+        if result:
+            column_names = [description[0] for description in cursor.description]
+            return dict(zip(column_names, result))
+        else:
+            return None
+
+    def get_all(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT id, role, username, icon, color, last_login, last_connect, last_disconnect FROM users")
+        columns = [column[0] for column in cursor.description]
+        data = []
+        for row in cursor.fetchall():
+            data.append(dict(zip(columns, row)))
+        return data
+
     def get(self, id):
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM users WHERE id=?", (id,))

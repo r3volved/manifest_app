@@ -13,7 +13,7 @@ import time
 import io
 
 from def_utilities import local_file, read_json, make_icon
-from def_windows import LoginWindow, UserWindow, PasswordWindow
+from def_windows import LoginWindow, UserWindow, PasswordWindow, ManageUserWindow
 from def_websocket import WebSocket
 
 pygame.mixer.init()
@@ -29,7 +29,7 @@ class AlertWindow(QMainWindow):
         self.init_ui()
 
         self.ws = WebSocket(self)
-        self.ws.password_changed.connect(self.password_changed)
+        # self.ws.password_changed.connect(self.password_changed)
         self.ws.load_users.connect(self.populate_users)
         self.ws.load_alerts.connect(self.populate_alerts)
         self.ws.audio_alert.connect(self.audio_alert)
@@ -41,6 +41,7 @@ class AlertWindow(QMainWindow):
         self.user_window = UserWindow(self)
         self.login_window = LoginWindow(self)
         self.password_window = PasswordWindow(self)
+        self.manage_user_window = ManageUserWindow(self)
 
     def init_ui(self):
         self.title = "Alert App"
@@ -73,6 +74,11 @@ class AlertWindow(QMainWindow):
         self.control_options_settings = QAction(make_icon("login"), "Login", self.control_options_menu)
         self.control_options_settings.triggered.connect(self.user_menu)
         self.control_options_menu.addAction(self.control_options_settings)
+
+        self.control_options_profile = QAction(make_icon("edit"), "User Profile", self.control_options_menu)
+        self.control_options_profile.triggered.connect(lambda checked: self.manage_user_window.edit_user())
+        self.control_options_profile.setVisible(False) #Show when connected
+        self.control_options_menu.addAction(self.control_options_profile)
 
         self.control_options_password = QAction(make_icon("edit"), "Change Password", self.control_options_menu)
         self.control_options_password.triggered.connect(lambda checked: self.password_window.show())
@@ -139,6 +145,7 @@ class AlertWindow(QMainWindow):
                 self.ws.disconnect()
 
     def websocket_connected(self):
+        self.control_options_profile.setVisible(True)
         self.control_options_password.setVisible(True)
         self.control_options_websocket.setText("Disconnect")
         self.control_options_websocket.setIcon(make_icon("connected"))
@@ -148,6 +155,7 @@ class AlertWindow(QMainWindow):
             self.control_alerts.show()
 
     def websocket_disconnected(self):
+        self.control_options_profile.setVisible(False)
         self.control_options_password.setVisible(False)
         self.control_options_websocket.setText("Connect")
         self.control_options_websocket.setIcon(make_icon("disconnected"))
@@ -171,14 +179,6 @@ class AlertWindow(QMainWindow):
             self.user_window.init_user()
             self.user_window.show()
 
-    # Password change request feedback
-    def password_changed(self, success, error, color, username):
-        if not success:
-            self.password_window.password_error(error, color)
-        else:
-            self.password_window.password_error(error, color)
-            self.password_window.hide()
-        QCoreApplication.processEvents()
 
     # Only disconnect from websocket - user session persists 
     def disconnect(self):
@@ -224,16 +224,24 @@ class AlertWindow(QMainWindow):
     def populate_users(self, users):
         menu = QMenu()
         for user in users:
-            name = user['name']
-            color = 'lightgreen'
-            if 'color' in user and user['color']:
-                color = user['color']
-
-            icon = make_icon('spock-fill', color)
-            if 'icon' in user and user["icon"]:
-                icon = make_icon(user["icon"], color)
+            name = user.get('name')
+            color = user.get('color')
+            if color is None:
+                color = 'lightgreen'
+    
+            if user.get("icon") is None:
+                icon = make_icon('spock-fill', color)
+            else:
+                icon = make_icon(user.get("icon"), color)
     
             action = QAction(icon, name, menu)
+
+            if self.user.get("role") <= 3:
+                if self.user.get("role") < user.get("role"):
+                    action.triggered.connect(lambda checked, i=user.get("id"): self.manage_user_window.edit_user(i))
+                else:
+                    action.triggered.connect(lambda checked, i=user.get("id"): self.manage_user_window.view_user(i))
+
             menu.addAction(action)
         self.control_users.setText('Users ('+str(len(users))+')')
         self.control_users.setMenu(menu)
@@ -249,12 +257,12 @@ class AlertWindow(QMainWindow):
         self.alerts.sort(key=sort_index)
         menu = QMenu()
         for alert in self.alerts:
-            text = alert["text"]
-            color = alert["color"]
+            text = alert.get("text")
+            color = alert.get("color")
             icon = make_icon('circle',color)
             action = QAction(icon, text, menu)
-            if alert["shortcut"]:
-                action.setShortcut(alert["shortcut"])  
+            if alert.get("shortcut"):
+                action.setShortcut(alert.get("shortcut")) 
             action.triggered.connect(lambda checked, t=text, c=color: self.send_alert(t,c))
             menu.addAction(action)
 

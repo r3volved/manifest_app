@@ -57,6 +57,10 @@ def hash_password(password):
     salt = bcrypt.gensalt()  # Generate a random salt
     return bcrypt.hashpw(password, salt)  # Hash the password
 
+def emit_error(event, error):
+    message = { "success":False, "error":error, "color":"red", "username":"System" }
+    return emit(event, message, broadcast=False)
+
 # Define the logout route for the webserver 
 @app.route("/logout", methods=["POST"])
 def logout():
@@ -116,6 +120,8 @@ def handle_validate(data):
 
     # User has connected and validated, set online user info
     online_users[request.sid] = { 
+        "user_id":user.get('id'),
+        "role":user.get('role'),
         "name":user.get('username'), 
         "icon":user.get('icon'),
         "color":user.get('color'),
@@ -169,7 +175,7 @@ def handle_get_online_users(data):
     print("Sending online users to " + user.get("username"))
 
 @socketio.on("change_password")
-def handle_get_online_users(data):
+def handle_change_password(data):
     user = get_user(data.get("token"))
     if user is None:
         return emit("reauthenticate", {}, broadcast=False)
@@ -178,13 +184,14 @@ def handle_get_online_users(data):
     
     # Old password must pass
     if not bcrypt.checkpw(old_password, user.get("password")):
-        message = {
-            "success":False,
-            "error":"Your old password does not match the current password",
-            "color":"red",
-            "username":"System"
-        }
-        return emit("password_changed", message, broadcast=False)
+        return emit_error("password_changed","Your old password does not match the current password")
+        # message = {
+        #     "success":False,
+        #     "error":"Your old password does not match the current password",
+        #     "color":"red",
+        #     "username":"System"
+        # }
+        # return emit("password_changed", message, broadcast=False)
         
     new_password = data.get("new_password")
 
@@ -216,10 +223,50 @@ def handle_get_online_users(data):
     }
     return emit("password_changed", message, broadcast=False)
 
+@socketio.on("get_user_profile")
+def hande_get_user_profile(data):
+    user = get_user(data.get("token"))
+    if user is None:
+        return emit("reauthenticate", {}, broadcast=False)
+
+    if data.get('user_id') is None:
+        profile = users.get_profile(user.get("id"))
+    else:
+        if user.get("role") > 3 and data.get('user_id') != user.get("id"):
+            return emit_error("user_profile", "You do not have permission to access this profile")
+        profile = users.get_profile(data.get("user_id"))
+
+    emit('user_profile', profile, broadcast=False)
+
+
 
 # Admin controls
+@socketio.on("get_all_users")
+def hande_get_all_users(data):
+    user = get_user(data.get("token"))
+    if user is None:
+        return emit("reauthenticate", {}, broadcast=False)
+
+    if user.get("role") > 3:
+        return emit_error("all_users", "You do not have permission to access user list")
+
+    user_list = users.get_all()
+    for record in user_list:
+        # Initialize the 'online_status' field as False
+        record['online_status'] = False
+        # Iterate over all online users
+        for online_user in online_users.values():
+            # If the 'user_id' of the online user matches the 'id' of the record,
+            # set the 'online_status' field to True
+            if online_user.get('user_id') == record.get('id'):
+                record['online_status'] = True
+                # Once we've found a match, there's no need to check the other online users
+                break
+
+    emit("all_users", user_list, broadcast=False)
+
 @socketio.on("create_user")
-def creat_new_user(data):
+def handle_creat_user(data):
     user = get_user(data.get("token"))
     if user is None:
         return emit("reauthenticate", {}, broadcast=False)
@@ -296,7 +343,7 @@ def creat_new_user(data):
     return emit("user_created", message, broadcast=False)
 
 @socketio.on("edit_user")
-def creat_new_user(data):
+def handle_edit_user(data):
     user = get_user(data.get("token"))
     if user is None:
         return emit("reauthenticate", {}, broadcast=False)

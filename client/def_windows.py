@@ -5,9 +5,9 @@ from PyQt5.QtCore import Qt, QCoreApplication, QEvent
 
 # Define the login window
 class LoginWindow(QDialog):
-    def __init__(self, parent):
+    def __init__(self, alert_window):
         super().__init__()
-        self.parent = parent
+        self.alert_window = alert_window
         self.init_ui()
 
     def init_ui(self):
@@ -29,37 +29,38 @@ class LoginWindow(QDialog):
         self.login_form.addRow(self.login_button)
         self.exit_button = QPushButton()
         self.exit_button.setText('Exit')
-        self.exit_button.clicked.connect(self.parent.exit)
+        self.exit_button.clicked.connect(self.alert_window.exit)
         self.login_form.addRow(self.exit_button)
         self.setLayout(self.login_form)
 
     # Automagic-close this window when loses focus
     def changeEvent(self, event):
         if event.type() == QEvent.ActivationChange and not self.isActiveWindow():
-            self.hide()
+            self.close()
 
     def login(self):
         user_id = self.login_user.text()
         password = self.login_password.text()
         if user_id and password:
-            self.parent.display_alert("Logging in ...","lightgrey")
+            self.alert_window.display_alert("Logging in ...","lightgrey")
             self.hide()
             QCoreApplication.processEvents()
 
-            response = requests.post(f"{self.parent.SERVER_URL}/login", data={"user_id": user_id, "password": password})
+            response = requests.post(f"{self.alert_window.SERVER_URL}/login", data={"user_id": user_id, "password": password})
             if response.status_code == 200:
                 data = response.json()
-                newuser = { "token":data["token"], "role":data["role"], "username":data["username"] }
-                self.parent.user.update_preferences(newuser)
-                self.parent.update_ui()
+                newuser = { "user_id":user_id, "token":data["token"], "role":data["role"], "username":data["username"] }
+                self.alert_window.user.update_preferences(newuser)
+                self.alert_window.update_ui()
             else:
-                self.parent.display_alert("Invalid credentials","orange")
+                self.alert_window.display_alert("Invalid credentials","orange")
 
 # Define the login window
 class PasswordWindow(QDialog):
-    def __init__(self, parent):
+    def __init__(self, alert_window):
         super().__init__()
-        self.parent = parent
+        self.alert_window = alert_window
+        self.alert_window.ws.password_changed.connect(self.password_changed)
         self.init_ui()
 
     def init_ui(self):
@@ -70,9 +71,8 @@ class PasswordWindow(QDialog):
 
         self.form = QFormLayout()
 
-        self.error_label = QLabel("...")
+        self.error_label = QLabel("Change your password")
         self.error_label.setWordWrap(True)
-        self.error_label.hide()
         self.form.addRow(self.error_label)
 
         self.old_password = QLineEdit()
@@ -97,44 +97,52 @@ class PasswordWindow(QDialog):
     # Automagic-close this window when loses focus
     def changeEvent(self, event):
         if event.type() == QEvent.ActivationChange and not self.isActiveWindow():
-            self.hide()
+            self.close()
 
+    # Submit a password change request
     def change_password(self):
-        old_password = self.old_password.text()
         new_password = self.new_password.text()
         confirm_password = self.confirm_new_password.text()
         if new_password != confirm_password:
-            return self.password_error("Your new passwords do not match","red")
+            return self.password_feedback("Your new passwords do not match","red")
 
         if len(new_password) < 8:
-            return self.password_error("Password must be at least 8 characters","red")
+            return self.password_feedback("Password must be at least 8 characters","red")
 
-        self.error_label.hide()
-        if self.parent.user.get("token") and self.parent.ws.isConnected():
-            self.parent.ws.change_password({ "token":self.parent.user.get("token"), "old_password":old_password, "new_password":new_password })
+        old_password = self.old_password.text()
+        if self.alert_window.user.get("token") and self.alert_window.ws.isConnected():
+            self.alert_window.ws.change_password({ 
+                "token":self.alert_window.user.get("token"), 
+                "old_password":old_password, 
+                "new_password":new_password 
+            })
 
-    def password_error(self, error, color):
+    # Set feedback text and color
+    def password_feedback(self, error, color):
         if color is None:
             color = 'red'
         self.error_label.setStyleSheet(f"color:{color}; padding-top:0.5em; padding-bottom:0.5em;")
         self.error_label.setText(error)
-        self.error_label.show()
-    
-    def close(self):
-        self.error_label.hide()
-        self.hide()
+        QCoreApplication.processEvents()
+
+    # Password change result
+    def password_changed(self, success, error, color, username):
+        if success:
+            self.password_feedback("Your password has been changed", color)
+        else:
+            self.password_feedback(error, color)
 
 # Define the user profile window
 class UserWindow(QDialog):
-    def __init__(self, parent):
+    def __init__(self, alert_window):
         super().__init__()
-        self.parent = parent
+        self.alert_window = alert_window
         self.init_ui()
 
     # Automagic-close this window when loses focus
     def changeEvent(self, event):
         if event.type() == QEvent.ActivationChange and not self.isActiveWindow():
-            self.hide()
+            self.close()
 
     def init_ui(self):
         self.setAutoFillBackground(True)
@@ -214,17 +222,19 @@ class UserWindow(QDialog):
         self.user_form.addRow(self.admin_frame)
         self.setLayout(self.user_form)
 
+    # Set the user for the window
     def init_user(self):
-        if self.parent.user.get("username") is not None:
-            self.setWindowTitle(self.parent.user.get("username"))
+        if self.alert_window.user.get("username") is not None:
+            self.setWindowTitle(self.alert_window.user.get("username"))
         else:
             self.setWindowTitle("Please login")
 
-        if self.parent.user.get("role") is not None and self.parent.user.get("role") <= 3:
+        if self.alert_window.user.get("role") <= 3:
             self.admin_frame.show()
         else:
             self.admin_frame.hide()
         
+    # Broadcast a message
     def broadcast(self):
         # Get text and color
         text = self.message_text.toPlainText()
@@ -239,21 +249,100 @@ class UserWindow(QDialog):
             color = "purple"
         elif self.message_send_yellow.isChecked():
             color = "yellow"
-        # Call parent send_alert
-        self.parent.send_alert(text, color)
+        # Call alert_window send_alert
+        self.alert_window.send_alert(text, color)
         self.message_text.clear()
             
+    # Set opacity from slider 
     def change_opacity(self):
         # Get opacity percent (1-100)
         value = self.opacity_slider.value()
-        # Call parent change_opacity
-        self.parent.change_opacity(value)
+        # Call alert_window change_opacity
+        self.alert_window.change_opacity(value)
         
+    # Set volume from slider 
     def change_volume(self):
         # Get volume percent (0-100)
         value = self.volume_slider.value()
-        # Call parent change_volume
-        self.parent.change_volume(value)
+        # Call alert_window change_volume
+        self.alert_window.change_volume(value)
 
 
+class ManageUserWindow(QDialog):
+    def __init__(self, alert_window):
+        super().__init__()
+        self.alert_window = alert_window
+        self.alert_window.ws.user_profile.connect(self.populate_ui)
+        self.init_ui()
+
+    # Automagic-close this window when loses focus
+    def changeEvent(self, event):
+        if event.type() == QEvent.ActivationChange and not self.isActiveWindow():
+            self.close()
+
+    def init_ui(self):
+        self.setAutoFillBackground(True)
+        self.setWindowModality(Qt.WindowModal)
+        self.setFixedWidth(500)
+
+        self.form = QFormLayout()
+        self.input_id = QLineEdit()
+        self.form.addRow("User ID", self.input_id)
+        self.input_role = QLineEdit()
+        self.form.addRow("Role", self.input_role)
+        self.input_username = QLineEdit()
+        self.form.addRow("Username", self.input_username)
+        self.input_icon = QLineEdit()
+        self.form.addRow("Icon", self.input_icon)
+        self.input_color = QLineEdit()
+        self.form.addRow("Color", self.input_color)
+        self.setLayout(self.form)
+
+    def view_user(self, user_id = None):
+        if user_id is None:
+            user_id = self.alert_window.user.get('user_id')
+        self.input_id.setReadOnly(True)
+        self.input_role.setReadOnly(True)
+        self.input_username.setReadOnly(True)
+        self.input_icon.setReadOnly(True)
+        self.input_color.setReadOnly(True)
+        # Get user profile from server and will call populate_ui
+        self.alert_window.ws.get_user_profile({
+            "token":self.alert_window.user.get("token"),
+            "user_id":user_id
+        })
+
+    def edit_user(self, user_id = None):
+        if user_id is None:
+            user_id = self.alert_window.user.get('user_id')
+        self.input_id.setReadOnly(True)
+        # Get user profile from server and will call populate_ui
+        self.alert_window.ws.get_user_profile({
+            "token":self.alert_window.user.get("token"),
+            "user_id":user_id
+        })
+
+    def new_user(self):
+        # Ignore this if not admin
+        if self.alert_window.user.get("role") > 3:
+            return
+        self.input_id.setReadOnly(False)
+        self.input_role.setReadOnly(False)
+        self.input_username.setReadOnly(False)
+        self.input_icon.setReadOnly(False)
+        self.input_color.setReadOnly(False)
+        self.input_id.setText("")
+        self.input_role.setText("")
+        self.input_username.setText("")
+        self.input_icon.setText("")
+        self.input_color.setText("")
+        self.show()
+        
+    def populate_ui(self, user):
+        self.input_id.setText(user.get('id'))
+        self.input_role.setText(str(user.get("role")))
+        self.input_username.setText(user.get("username"))
+        self.input_icon.setText(user.get("icon"))
+        self.input_color.setText(user.get("color"))
+        self.show()
 

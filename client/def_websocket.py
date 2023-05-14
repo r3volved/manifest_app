@@ -3,6 +3,7 @@ import socketio
 from PyQt5.QtCore import QObject, pyqtSignal
 
 class WebSocket(QObject):
+    user_profile = pyqtSignal(dict)
     password_changed = pyqtSignal(bool, str, str, str)
     load_users = pyqtSignal(list)
     load_alerts = pyqtSignal(list)
@@ -26,6 +27,10 @@ class WebSocket(QObject):
         @self.sio.event
         def disconnect():
             self.disconnected.emit()
+
+        @self.sio.event
+        def user_profile(data):
+            self.user_profile.emit(data)
 
         @self.sio.event
         def receive_alert(data):
@@ -63,6 +68,8 @@ class WebSocket(QObject):
             username = data.get("username")
             self.password_changed.emit(success, error, color, username)
 
+    def get_user_profile(self, data):
+        self.sio.emit("get_user_profile", data)
 
     def change_password(self, data):
         self.sio.emit("change_password", data)
