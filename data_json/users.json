@@ -1,0 +1,62 @@
+{
+  "users": [
+    {
+      "id": "user",
+      "password": "********",
+      "role": 1,
+      "rank": 1,
+      "department": 1,
+      "username": "SUPER",
+      "icon": "spock-stroke",
+      "color": "blue",
+      "last_login": "2023-05-12T19:31:25.110Z",
+      "last_connect": "2023-05-12T19:31:25.110Z",
+      "last_disconnect": "2023-05-12T19:36:32.745668+00:00"
+    },
+    {
+      "id": "user1",
+      "password": "********",
+      "role": 2,
+      "rank": null,
+      "department": null,
+      "username": "TESTADMIN",
+      "icon": null,
+      "color": null,
+      "last_login": null,
+      "last_connect": null,
+      "last_disconnect": null
+    },
+    {
+      "id": "user2",
+      "password": "********",
+      "role": 4,
+      "rank": null,
+      "department": null,
+      "username": "TESTUSER2",
+      "icon": null,
+      "color": null,
+      "last_login": null,
+      "last_connect": null,
+      "last_disconnect": null
+    },
+    {
+      "id": "user3",
+      "password": "********",
+      "role": 4,
+      "rank": null,
+      "department": null,
+      "username": "TESTUSER3",
+      "icon": null,
+      "color": null,
+      "last_login": null,
+      "last_connect": null,
+      "last_disconnect": null
+    }
+  ],
+  "tokens": [
+    {
+      "id": "...user_id",
+      "token": "..."
+    }
+  ]
+}

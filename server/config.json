@@ -1,0 +1,11 @@
+{
+    "PORT":5000,
+    "USER_STORE":{ 
+        "source":"users.db",
+        "type":"sqlite"
+    },
+    "DATA_STORE":{
+        "source":"data.db",
+        "type":"sqlite"
+    }
+}

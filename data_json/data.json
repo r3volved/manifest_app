@@ -1,0 +1,244 @@
+{
+    "alerts":[
+        {
+            "id":1,
+            "sort_index":2,
+            "text":"Base is under attack",
+            "color":"red",
+            "shortcut":null
+        },{
+            "id":2,
+            "sort_index":1,
+            "text":"All clear",
+            "color":"lightgreen",
+            "shortcut":null,
+            "severity":1
+        },{
+            "id":3,
+            "sort_index":1,
+            "text":"Enemy down",
+            "color":"lightgreen",
+            "shortcut":null
+        }
+    ],
+
+    "permissions":[
+        {
+            "id":1,
+            "name":"Create",
+            "bits":"00001000"
+        }
+    ],
+    
+    "ranks":[
+        {
+            "id":1,
+            "name":"Admiral",
+            "icon":"",
+            "color":""
+        },{
+            "id":2,
+            "name":"Fleet Captain 06",
+            "icon":"",
+            "color":""
+        },{
+            "id":3,
+            "name":"Captain 05",
+            "icon":"",
+            "color":""
+        },{
+            "id":4,
+            "name":"Commander 04",
+            "icon":"",
+            "color":""
+        },{
+            "id":5,
+            "name":"Lt. Commander 03",
+            "icon":"",
+            "color":""
+        },{
+            "id":6,
+            "name":"Lt. 02",
+            "icon":"",
+            "color":""
+        },{
+            "id":7,
+            "name":"Ensign 01",
+            "icon":"",
+            "color":""
+        },{
+            "id":8,
+            "name":"Corporal E3",
+            "icon":"",
+            "color":""
+        },{
+            "id":9,
+            "name":"Specialist E2",
+            "icon":"",
+            "color":""
+        },{
+            "id":10,
+            "name":"Private E1",
+            "icon":"",
+            "color":""
+        },{
+            "id":11,
+            "name":"Recruit E0",
+            "icon":"",
+            "color":""
+        }
+    ],
+    
+    "roles":[
+        {
+            "id":1,
+            "name":"Super Admin"
+        },{
+            "id":2,
+            "name":"Admin"
+        },{
+            "id":3,
+            "name":"Officer"
+        },{
+            "id":4,
+            "name":"Member"
+        }
+    ],
+    
+    "departments":[
+        {
+            "id":1,
+            "name":"Commanding Officer",
+            "acronym":"CO",
+            "icon":"",
+            "color":""
+        },{
+            "id":2,
+            "name":"Operations",
+            "acronym":"OPS",
+            "icon":"",
+            "color":""
+        },{
+            "id":3,
+            "name":"Intelligence",
+            "acronym":"INT",
+            "icon":"",
+            "color":""
+        },{
+            "id":4,
+            "name":"Security",
+            "acronym":"SEC",
+            "icon":"",
+            "color":""
+        },{
+            "id":5,
+            "name":"Air Tactical",
+            "acronym":"AT",
+            "icon":"",
+            "color":""
+        },{
+            "id":6,
+            "name":"Medical",
+            "acronym":"MED",
+            "icon":"",
+            "color":""
+        },{
+            "id":7,
+            "name":"Engineering",
+            "acronym":"ENG",
+            "icon":"",
+            "color":""
+        }
+    ],
+    
+    "colors":[
+        {
+            "id":1,
+            "name":"Red",
+            "value":"red"
+        },{
+            "id":2,
+            "name":"Yellow",
+            "value":"yellow"
+        },{
+            "id":3,
+            "name":"Green",
+            "value":"lightgreen"
+        },{
+            "id":5,
+            "name":"Blue",
+            "value":"#1261A0"
+        }
+    ],
+    
+    "icons":[
+        {
+            "id":1,
+            "name":"circle",
+            "type":"svg",
+            "file_path":"",
+            "file_content":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"50\" fill=\"black\"/></svg>"
+        },{
+            "id":2,
+            "name":"officer",
+            "type":"png",
+            "file_path":"icons/officer.png",
+            "file_content":""
+        }
+    ],
+    
+    "sounds":[
+        {
+            "id":1,
+            "name":"Red Alarm",
+            "type":"mp3",
+            "file_path":"sounds/red_alarm.mp3",
+            "file_content":""
+        },{
+            "id":2,
+            "name":"Assimilation",
+            "type":"tts",
+            "file_path":"",
+            "file_content":"I assimilated your mom"
+        }
+    ],
+
+    "status":[
+        {
+            "id":1,
+            "text":"Ready",
+            "icon":"",
+            "color":""
+        },{
+            "id":2,
+            "text":"Crashed",
+            "icon":"",
+            "color":""
+        },{
+            "id":3,
+            "text":"AFK",
+            "icon":"",
+            "color":""
+        },{
+            "id":4,
+            "text":"Do Not Disturb",
+            "icon":"",
+            "color":""
+        },{
+            "id":5,
+            "text":"Offline",
+            "icon":"",
+            "color":""
+        }
+    ],
+
+    "severities":[
+        {
+            "id":1,
+            "text":"Critical"
+        },{
+            "id":2,
+            "text":"High"
+        }
+    ]
+}
